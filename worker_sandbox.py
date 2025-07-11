@@ -11,6 +11,7 @@ import time
 import torch
 import torch.distributed as dist
 from loguru import logger as log
+from cosmos_transfer1.diffusion.inference.transfer import parse_arguments
 
 
 def worker_main():
@@ -18,7 +19,7 @@ def worker_main():
     Worker function that runs in each distributed process.
     Has a control loop to wait for input from the main function.
     """
-    log.info(f"Worker init")
+    log.info("Worker init")
 
     if not dist.is_initialized():
         dist.init_process_group(backend="nccl", init_method="env://")

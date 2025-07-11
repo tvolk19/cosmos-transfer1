@@ -90,14 +90,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--controlnet_specs",
         type=str,
+        default="assets/inference_cosmos_transfer1_single_control_edge.json",
         help="Path to JSON file specifying multicontrolnet configurations",
-        required=True,
+        # required=True,
     )
     parser.add_argument(
         "--is_av_sample", action="store_true", help="Whether the model is an driving post-training model"
     )
     parser.add_argument(
-        "--checkpoint_dir", type=str, default="checkpoints", help="Base directory containing model checkpoints"
+        "--checkpoint_dir",
+        type=str,
+        default="/mnt/pvc/cosmos-transfer1",
+        help="Base directory containing model checkpoints",
     )
     parser.add_argument(
         "--tokenizer_dir",
