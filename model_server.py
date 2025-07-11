@@ -6,71 +6,150 @@ Worker processes are now handled by worker_sandbox.py.
 """
 
 import argparse
-import json
 import os
 import subprocess
 import time
-from typing import Dict, Any, Optional
 from loguru import logger as log
 
+from worker_manager import WorkerManager
+from cosmos_transfer1.diffusion.inference.transfer import parse_arguments
 
-def send_command_to_worker(rank: int, command: str, params: Optional[Dict[str, Any]] = None):
-    """Send a command to a specific worker."""
-    command_file = f"/tmp/worker_{rank}_commands.json"
-    command_data = {"command": command, "params": params or {}}
-
-    with open(command_file, "w") as f:
-        json.dump(command_data, f)
-
-    log.info(f"Sent command '{command}' to worker {rank}")
+args_worker = "--checkpoint_dir $CHECKPOINT_DIR \
+    --video_save_folder outputs/example1_single_control_edge \
+    --controlnet_specs assets/inference_cosmos_transfer1_single_control_edge.json \
+    --offload_text_encoder_model \
+    --offload_guardrail_models \
+    --num_gpus $NUM_GPU"
 
 
-def get_worker_status(rank: int) -> Dict[str, Any]:
-    """Get the status of a specific worker."""
-    status_file = f"/tmp/worker_{rank}_status.json"
+class ModelServer:
+    """
+    A class to manage distributed worker processes using torchrun.
+    """
 
-    if os.path.exists(status_file):
+    def __init__(self, num_workers: int = 2, master_port: int = 12345, backend: str = "nccl"):
+        """
+        Initialize the ModelServer.
+
+        Args:
+            num_workers: Number of worker processes to spawn
+            master_port: Port for distributed training coordination
+            backend: Backend for distributed training (nccl, gloo, etc.)
+        """
+        self.num_workers = num_workers
+        self.master_port = master_port
+        self.backend = backend
+        self.process = None
+        self.worker_manager = WorkerManager(num_workers)
+        self._setup_environment()
+        self.start_workers()
+
+    def _setup_environment(self):
+        """Set up environment variables for distributed training."""
+        self.env = os.environ.copy()
+        self.env["MASTER_ADDR"] = "localhost"
+        self.env["MASTER_PORT"] = str(self.master_port)
+        self.env["WORLD_SIZE"] = str(self.num_workers)
+
+    def start_workers(self):
+        # Clean up any existing worker files
+        self.worker_manager.cleanup_worker_files()
+
+        log.info(f"Starting {self.num_workers} worker processes with torchrun")
+
+        # Build torchrun command to run worker_sandbox.py
+        torchrun_cmd = [
+            "torchrun",
+            f"--nproc_per_node={self.num_workers}",
+            f"--master_port={self.master_port}",
+            "worker_sandbox.py",  # TODO args_worker, for now we run worker with default args
+        ]
+
+        log.info(f"Running command: {' '.join(torchrun_cmd)}")
+
+        # Launch worker processes
         try:
-            with open(status_file, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {"status": "unknown", "rank": rank}
-    else:
-        return {"status": "not_ready", "rank": rank}
+            self.process = subprocess.Popen(
+                torchrun_cmd,
+                env=self.env,
+                # stdout=subprocess.PIPE,
+                # stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+            )
 
+            # Give workers time to start
+            time.sleep(2)
 
-def wait_for_workers_ready(num_workers: int, timeout: float = 30.0):
-    """Wait for all workers to be ready."""
-    start_time = time.time()
+            # Wait for workers to be ready
+            if not self.worker_manager.wait_for_workers_ready():
+                log.error("Failed to start all workers")
+                self.stop_workers()
+                raise Exception("Failed to start all workers")
 
-    while time.time() - start_time < timeout:
-        ready_count = 0
-        for rank in range(num_workers):
-            status = get_worker_status(rank)
-            if status.get("status") == "ready":
-                ready_count += 1
+            log.info("All workers started successfully!")
 
-        if ready_count == num_workers:
-            log.info(f"All {num_workers} workers are ready")
-            return True
+        except Exception as e:
+            log.error(f"Error starting workers: {e}")
+            raise e
 
-        time.sleep(0.5)
+    def stop_workers(self):
+        """Shutdown all worker processes."""
+        if self.process is None:
+            return
 
-    log.error(f"Timeout waiting for workers to be ready. Only {ready_count}/{num_workers} ready")
-    return False
+        self.worker_manager.shutdown_all_workers()
 
+        # Wait a bit for graceful shutdown
+        time.sleep(2)
 
-def cleanup_worker_files(num_workers: int):
-    """Clean up temporary worker files."""
-    for rank in range(num_workers):
-        for file_path in [f"/tmp/worker_{rank}_commands.json", f"/tmp/worker_{rank}_status.json"]:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        # Terminate process if still running
+        if self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait(timeout=10)
+
+        log.info("All workers shut down")
+        self.process = None
+
+    def run_inference(self, args: str):
+
+        try:
+            self.worker_manager.send_task_to_all_workers("process_task", {"task_id": "example_task", "duration": 2.0})
+
+            # Wait for tasks to complete
+            log.info("Waiting for tasks to complete...")
+            time.sleep(5)
+
+            # todo this should be blocking call to wait for completion of all workers
+            statuses = self.worker_manager.get_all_worker_statuses()
+            for rank, status in statuses.items():
+                log.info(f"Worker {rank} status: {status}")
+
+        except Exception as e:
+            log.error(f"Error during workflow: {e}")
+        finally:
+            self.stop_workers()
+            self.worker_manager.cleanup_worker_files()
+
+    def __del__(self):
+        """Cleanup when the object is destroyed."""
+        self.stop_workers()
+        self.worker_manager.cleanup_worker_files()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.stop_workers()
+        self.worker_manager.cleanup_worker_files()
 
 
 def main():
     """
-    Main function that launches 8 worker processes using torchrun.
+    Main function that launches worker processes using the ModelServer class.
     """
     parser = argparse.ArgumentParser(description="Distributed Worker Manager")
     parser.add_argument("--num_workers", type=int, default=2, help="Number of worker processes")
@@ -79,87 +158,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Clean up any existing worker files
-    cleanup_worker_files(args.num_workers)
+    # Create and run the model server
+    with ModelServer(num_workers=args.num_workers, master_port=args.master_port, backend=args.backend) as server:
 
-    log.info(f"Starting {args.num_workers} worker processes with torchrun")
+        # todo should we pass in a argparse.Namespace object?
+        # args = parse_arguments(args)
 
-    # Set up environment variables for distributed training
-    env = os.environ.copy()
-    env["MASTER_ADDR"] = "localhost"
-    env["MASTER_PORT"] = str(args.master_port)
-    env["WORLD_SIZE"] = str(args.num_workers)
+        server.run_inference(args_worker)
 
-    # Build torchrun command to run worker_sandbox.py
-    torchrun_cmd = [
-        "torchrun",
-        f"--nproc_per_node={args.num_workers}",
-        f"--master_port={args.master_port}",
-        "worker_sandbox.py",
-    ]
-
-    log.info(f"Running command: {' '.join(torchrun_cmd)}")
-
-    # Launch worker processes
-    try:
-        process = subprocess.Popen(
-            torchrun_cmd,
-            env=env,
-            # stdout=subprocess.PIPE,
-            # stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-        )
-
-        # Give workers time to start
-        time.sleep(2)
-
-        # Wait for workers to be ready
-        if not wait_for_workers_ready(args.num_workers):
-            log.error("Failed to start all workers")
-            process.terminate()
-            return
-
-        log.info("All workers started successfully!")
-
-        # Example: Send tasks to all workers
-
-        log.info("Sending example tasks to all workers...")
-
-        # Send same task to all workers
-        for rank in range(args.num_workers):
-            send_command_to_worker(rank, "process_task", {"task_id": "example_task", "duration": 2.0})
-
-        # Wait for tasks to complete
-        log.info("Waiting for tasks to complete...")
-        time.sleep(5)
-
-        # Check results
-        for rank in range(args.num_workers):
-            status = get_worker_status(rank)
-            log.info(f"Worker {rank} status: {status}")
-
-        # Shutdown workers
-        log.info("Shutting down workers...")
-        for rank in range(args.num_workers):
-            send_command_to_worker(rank, "shutdown")
-
-        # Wait a bit for graceful shutdown
-        time.sleep(2)
-
-        # Terminate process if still running
-        if process.poll() is None:
-            process.terminate()
-            process.wait(timeout=10)
-
-        log.info("All workers shut down")
-
-    except Exception as e:
-        log.error(f"Error: {e}")
-    finally:
-        # Clean up temporary files
-        cleanup_worker_files(args.num_workers)
+    # todo this should be blocking call
 
 
 if __name__ == "__main__":

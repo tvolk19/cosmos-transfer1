@@ -11,6 +11,8 @@ import time
 import torch
 import torch.distributed as dist
 from loguru import logger as log
+from cosmos_transfer1.diffusion.inference.transfer import parse_arguments
+from cosmos_transfer1.diffusion.inference.transfer_pipeline import BaseTransferPipeline
 
 
 def worker_main():
@@ -18,20 +20,21 @@ def worker_main():
     Worker function that runs in each distributed process.
     Has a control loop to wait for input from the main function.
     """
-    log.info(f"Worker init")
+    log.info("Worker init")
 
-    if not dist.is_initialized():
-        dist.init_process_group(backend="nccl", init_method="env://")
+    # if not dist.is_initialized():
+    #    dist.init_process_group(backend="nccl", init_method="env://")
 
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    local_rank = int(os.environ.get("LOCAL_RANK", rank))
+    # rank = dist.get_rank()
+    # world_size = dist.get_world_size()
+    # local_rank = int(os.environ.get("LOCAL_RANK", rank))
+    # torch.cuda.set_device(local_rank)
+    # device = torch.device(f"cuda:{local_rank}")
+    # log.info(f"Worker {rank}/{world_size} initialized on device {device}")
 
-    # Set device for this worker
-    torch.cuda.set_device(local_rank)
-    device = torch.device(f"cuda:{local_rank}")
-
-    log.info(f"Worker {rank}/{world_size} initialized on device {device}")
+    rank = int(os.environ.get("LOCAL_RANK", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    log.info(f"Worker {rank}/{world_size}")
 
     # Create a simple control loop to wait for commands
     command_file = f"/tmp/worker_{rank}_commands.json"
@@ -42,6 +45,8 @@ def worker_main():
         json.dump({"status": "ready", "rank": rank, "pid": os.getpid()}, f)
 
     try:
+        pipeline = BaseTransferPipeline(num_gpus=world_size, checkpoint_dir="/mnt/pvc/CosmosTransfer1")
+
         while True:
             # Check for new commands
             if os.path.exists(command_file):
@@ -59,15 +64,18 @@ def worker_main():
                         log.info(f"Worker {rank} shutting down")
                         break
                     elif command == "process_task":
-                        result = process_task(rank, params, device)
+                        result = process_task(rank, params)
+
+                        # read input parameters from command
+                        params = BaseTransferPipeline.create_model_params()
+                        pipeline.infer(params)
 
                         # Update status with result
                         with open(status_file, "w") as f:
                             json.dump(
                                 {
-                                    "status": "completed",
                                     "rank": rank,
-                                    "task_id": params.get("task_id", "unknown"),
+                                    "status": "completed",
                                     "result": result,
                                 },
                                 f,
@@ -104,7 +112,7 @@ def worker_main():
             dist.destroy_process_group()
 
 
-def process_task(rank: int, params: dict, device: torch.device) -> float:
+def process_task(rank: int, params: dict) -> float:
 
     task_id = params.get("task_id", "unknown")
     duration = params.get("duration", 1.0)
@@ -115,7 +123,7 @@ def process_task(rank: int, params: dict, device: torch.device) -> float:
     time.sleep(duration)
 
     # Create some dummy tensor computation
-    x = torch.randn(100, 100, device=device)
+    x = torch.randn(100, 100)
     y = torch.matmul(x, x.T)
     result = torch.sum(y).item()
 
