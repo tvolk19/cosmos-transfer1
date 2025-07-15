@@ -3,10 +3,10 @@
 #export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:=0}"
 export CHECKPOINT_DIR=/mnt/pvc/cosmos-transfer1
 
-export NUM_GPU="${NUM_GPU:=1}"
+export NUM_GPU="${NUM_GPU:=8}"
 
-PYTHONPATH=$(pwd) python3 cosmos_transfer1/diffusion/inference/transfer_pipeline.py
-# PYTHONPATH=$(pwd) torchrun --nproc_per_node=$NUM_GPU --nnodes=1 --node_rank=0 cosmos_transfer1/diffusion/inference/transfer_pipeline.py
+#PYTHONPATH=$(pwd) python3 cosmos_transfer1/diffusion/inference/transfer_pipeline.py
+PYTHONPATH=$(pwd) torchrun --nproc_per_node=$NUM_GPU --nnodes=1 --node_rank=0 cosmos_transfer1/diffusion/inference/transfer_pipeline.py
 
 #PYTHONPATH=$(pwd) torchrun --nproc_per_node=$NUM_GPU --nnodes=1 --node_rank=0 cosmos_transfer1/diffusion/inference/transfer.py
 
