@@ -1,47 +1,42 @@
 #!/usr/bin/env python3
-"""
-Refactored pipeline classes for Cosmos Transfer generation.
-Contains base class and derived class for pipeline initialization and generation.
-"""
+
 import argparse
 import copy
 import json
 import os
 
-# No typing imports needed
 
 from cosmos_transfer1.checkpoints import (
     VIS2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
     EDGE2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
+    DEPTH2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
+    SEG2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
+    KEYPOINT2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
     BASE_7B_CHECKPOINT_PATH,
 )
-from cosmos_transfer1.diffusion.inference.inference_utils import validate_controlnet_specs
 from cosmos_transfer1.diffusion.inference.preprocessors import Preprocessors
 from cosmos_transfer1.diffusion.inference.world_generation_pipeline import DiffusionControl2WorldGenerationPipeline
 from cosmos_transfer1.utils import log
 from cosmos_transfer1.utils.io import save_video
 
-# from typing import Dict, Any
+"""
+pipeline class similar to demo function.
+we can't use the demo function as the function discards the underlying pipeline after each inference.
 
-# valid_hint_keys = {"vis", "seg", "edge", "depth", "keypoint", "upscale", "hdmap", "lidar"}
+This class creates the pipeline during initialization and keeps it alive for multiple inferences.
+The pipeline is configured for to NOT offload the models in favor of speed.
 
+For now we assume a fixed configuration of the controlnets for the lifetime of the pipeline.
+This makes the config.json file for the controlnets a init parameter of the pipeline.
+TODO we have to see how to configure different controlnet configurations and set respective control weights.
 
-# def load_controlnet_specs(cfg) -> Dict[str, Any]:
-#     with open(cfg, "r") as f:
-#         controlnet_specs_in = json.load(f)
+TODO can we load all controlnets at once?
 
-#     controlnet_specs = {}
+TODO batch support
 
-#     for hint_key, config in controlnet_specs_in.items():
-#         if hint_key in valid_hint_keys:
-#             controlnet_specs[hint_key] = config
-#         else:
-#             if type(config) == dict:
-#                 raise ValueError(f"Invalid hint_key: {hint_key}. Must be one of {valid_hint_keys}")
-#             else:
-#                 log.warning(f"Ignoring unknown control key: {hint_key}. Must be one of {valid_hint_keys}")
-#                 continue
-#     return controlnet_specs
+TODO av support
+
+"""
 
 
 class TransferPipeline:
@@ -49,7 +44,6 @@ class TransferPipeline:
         self,
         num_gpus: int = 1,
         checkpoint_dir: str = "/mnt/pvc/cosmos-transfer1",
-        # TODO control_inputs: str = "assets/inference_cosmos_transfer1_single_control_edge.json",
     ):
 
         self.pipeline = None
@@ -69,14 +63,22 @@ class TransferPipeline:
             self.device_rank = distributed.get_rank(self.process_group)
 
         self.control_inputs = self.create_controlnet_spec(checkpoint_dir=checkpoint_dir)
-        # self.control_inputs = load_controlnet_specs(control_inputs)
-        # self.control_inputs = validate_controlnet_specs(cfg, control_inputs)
+
+        self.video_save_folder = "outputs/"
+        self.video_save_name = "output"
 
         self.pipeline = DiffusionControl2WorldGenerationPipeline(
             checkpoint_dir=checkpoint_dir,
             checkpoint_name=BASE_7B_CHECKPOINT_PATH,
             control_inputs=self.control_inputs,
             process_group=self.process_group,
+            offload_network=False,
+            offload_text_encoder_model=False,
+            offload_guardrail_models=False,
+            offload_prompt_upsampler=False,
+            upsample_prompt=False,
+            fps=24,
+            num_input_frames=24,
         )
 
     def create_controlnet_spec(
@@ -92,7 +94,7 @@ class TransferPipeline:
 
         if vis_weight > 0:
             control_inputs["vis"] = {
-                "ckpt_path": VIS2WORLD_CONTROLNET_7B_CHECKPOINT_PATH,
+                "ckpt_path": os.path.join(checkpoint_dir, VIS2WORLD_CONTROLNET_7B_CHECKPOINT_PATH),
                 "control_weight": vis_weight,
             }
 
@@ -103,13 +105,22 @@ class TransferPipeline:
             }
 
         if depth_weight > 0:
-            control_inputs["depth"] = {"control_weight": depth_weight}
+            control_inputs["depth"] = {
+                "ckpt_path": os.path.join(checkpoint_dir, DEPTH2WORLD_CONTROLNET_7B_CHECKPOINT_PATH),
+                "control_weight": depth_weight,
+            }
 
         if seg_weight > 0:
-            control_inputs["seg"] = {"control_weight": seg_weight}
+            control_inputs["seg"] = {
+                "ckpt_path": os.path.join(checkpoint_dir, SEG2WORLD_CONTROLNET_7B_CHECKPOINT_PATH),
+                "control_weight": seg_weight,
+            }
 
         if keypoint_weight > 0:
-            control_inputs["keypoint"] = {"control_weight": keypoint_weight}
+            control_inputs["keypoint"] = {
+                "ckpt_path": os.path.join(checkpoint_dir, KEYPOINT2WORLD_CONTROLNET_7B_CHECKPOINT_PATH),
+                "control_weight": keypoint_weight,
+            }
 
         log.info(f"control_inputs: {json.dumps(control_inputs, indent=4)}")
 
@@ -117,43 +128,39 @@ class TransferPipeline:
 
     def infer(self, cfg):
 
-        # Run preprocessor
-        log.info("Running preprocessor")
+        # original code is creating deepcopy. are values touched?
+        # TODO add control weights as inference parameter
         current_control_inputs = copy.deepcopy(self.control_inputs)
-
-        self.preprocessors(
-            cfg.input_video_path,
-            cfg.prompt,
-            current_control_inputs,
-            cfg.video_save_folder,
-        )
         log.info(f"current_control_inputs: {json.dumps(current_control_inputs, indent=4)}")
 
+        log.info("Running preprocessor")
+        self.preprocessors(
+            cfg.input_video,
+            cfg.prompt,
+            current_control_inputs,
+            self.video_save_folder,
+        )
+
+        # TODO: add support for regional prompts and region definitions
         if hasattr(self.pipeline, "regional_prompts"):
             self.pipeline.regional_prompts = []
         if hasattr(self.pipeline, "region_definitions"):
             self.pipeline.region_definitions = []
 
-        self.pipeline.offload_network = cfg.offload_diffusion_transformer
-        self.pipeline.offload_text_encoder_model = cfg.offload_text_encoder_model
-        self.pipeline.offload_guardrail_models = cfg.offload_guardrail_models
+        # WAR these inference parameters are for unknown reasons not part of the generate function
         self.pipeline.guidance = cfg.guidance
         self.pipeline.num_steps = cfg.num_steps
-        self.pipeline.fps = cfg.fps
         self.pipeline.seed = cfg.seed
-        self.pipeline.num_input_frames = cfg.num_input_frames
         self.pipeline.sigma_max = cfg.sigma_max
         self.pipeline.blur_strength = cfg.blur_strength
         self.pipeline.canny_threshold = cfg.canny_threshold
-        self.pipeline.upsample_prompt = cfg.upsample_prompt
-        self.pipeline.offload_prompt_upsampler = cfg.offload_prompt_upsampler
 
         batch_outputs = self.pipeline.generate(
             prompt=[cfg.prompt],
-            video_path=[cfg.input_video_path],
+            video_path=[cfg.input_video],
             negative_prompt=cfg.negative_prompt,
             control_inputs=[current_control_inputs],
-            save_folder=cfg.video_save_folder,
+            save_folder=self.video_save_folder,
             batch_size=1,
         )
 
@@ -161,13 +168,13 @@ class TransferPipeline:
             videos, final_prompts = batch_outputs
             for i, (video, prompt) in enumerate(zip(videos, final_prompts)):
 
-                video_save_path = os.path.join(cfg.video_save_folder, f"{cfg.video_save_name}.mp4")
-                prompt_save_path = os.path.join(cfg.video_save_folder, f"{cfg.video_save_name}.txt")
+                video_save_path = os.path.join(self.video_save_folder, f"{self.video_save_name}.mp4")
+                prompt_save_path = os.path.join(self.video_save_folder, f"{self.video_save_name}.txt")
                 os.makedirs(os.path.dirname(video_save_path), exist_ok=True)
 
                 save_video(
                     video=video,
-                    fps=cfg.fps,
+                    fps=self.pipeline.fps,
                     H=video.shape[1],
                     W=video.shape[2],
                     video_save_quality=5,
@@ -192,7 +199,6 @@ class TransferPipeline:
         sigma_max=70.0,
         blur_strength="medium",
         canny_threshold="medium",
-        output_folder="outputs/",
     ):
         args = argparse.Namespace()
 
@@ -209,11 +215,9 @@ class TransferPipeline:
         #         )
 
         # Video and prompt settings
-        args.input_video_path = input_video
+        args.input_video = input_video
         args.prompt = prompt
         args.negative_prompt = negative_prompt
-        args.video_save_folder = output_folder
-        args.video_save_name = "output"
 
         # Generation parameters
         args.guidance = guidance
@@ -222,21 +226,6 @@ class TransferPipeline:
         args.sigma_max = sigma_max
         args.blur_strength = blur_strength
         args.canny_threshold = canny_threshold
-
-        # Model settings
-        args.is_av_sample = False
-        args.tokenizer_dir = "Cosmos-Tokenize1-CV8x8x8-720p"
-        args.num_input_frames = 1
-        args.fps = 24
-        args.batch_size = 1
-        # args.num_gpus = 1
-
-        # Memory optimization
-        args.offload_diffusion_transformer = True
-        args.offload_text_encoder_model = True
-        args.offload_guardrail_models = True
-        args.upsample_prompt = False
-        args.offload_prompt_upsampler = True
 
         return args
 
@@ -251,7 +240,7 @@ class TransferPipeline:
 
 
 if __name__ == "__main__":
-    pipeline = TransferPipeline(num_gpus=8)
+    pipeline = TransferPipeline(num_gpus=int(os.environ.get("NUM_GPU", 1)))
     model_params = TransferPipeline.create_model_params()
     pipeline.infer(model_params)
 

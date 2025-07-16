@@ -5,23 +5,15 @@ Workers have control loops to wait for input from the main function.
 Worker processes are now handled by worker_sandbox.py.
 """
 
-import argparse
 import os
 import subprocess
 import time
 from loguru import logger as log
-
-from worker_manager import WorkerManager, WorkerStatus
-from cosmos_transfer1.diffusion.inference.transfer import parse_arguments
+import json
 import signal
 import sys
-
-args_worker = "--checkpoint_dir $CHECKPOINT_DIR \
-    --video_save_folder outputs/example1_single_control_edge \
-    --controlnet_specs assets/inference_cosmos_transfer1_single_control_edge.json \
-    --offload_text_encoder_model \
-    --offload_guardrail_models \
-    --num_gpus $NUM_GPU"
+from worker_manager import WorkerManager, WorkerStatus
+from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferPipeline
 
 
 class ModelServer:
@@ -99,10 +91,10 @@ class ModelServer:
         log.info("All workers shut down")
         self.process = None
 
-    def run_inference(self, args: str):
+    def run_inference(self, args: dict):
 
         try:
-            self.worker_manager.send_task_to_all_workers("process_task", {"duration": 2.0})
+            self.worker_manager.send_task_to_all_workers("process_task", args)
 
             # Wait for tasks to complete
             log.info("Waiting for tasks to complete...")
@@ -142,5 +134,9 @@ if __name__ == "__main__":
 
     num_gpus = int(os.environ.get("NUM_GPU", 1))
     with ModelServer(num_workers=num_gpus) as server:
-
-        server.run_inference(args_worker)
+        # create dummy parameters for testing
+        # for gradio we need to create stub that can be used as callback
+        args = TransferPipeline.create_model_params()
+        args_dict = {key: value for key, value in vars(args).items()}
+        log.info(f"Model parameters: {json.dumps(args_dict, indent=4)}")
+        server.run_inference(args_dict)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 WorkerManager class for managing communication with distributed worker processes.
+
 """
 
 import json
