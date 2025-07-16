@@ -12,7 +12,7 @@ from loguru import logger as log
 import json
 import signal
 import sys
-from worker_manager import WorkerManager, WorkerStatus
+from worker_manager import WorkerCommand, WorkerStatus
 from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferPipeline
 
 
@@ -27,7 +27,7 @@ class ModelServer:
         self.master_port = master_port
         # self.backend = backend
         self.process = None
-        self.worker_manager = WorkerManager(num_workers)
+        self.worker_command = WorkerCommand(num_workers)
         self.worker_status = WorkerStatus(num_workers)
         self._setup_environment()
         self.start_workers()
@@ -40,7 +40,8 @@ class ModelServer:
 
     def start_workers(self):
 
-        self.worker_manager.cleanup_worker_files()
+        self.worker_command.cleanup()
+        self.worker_status.cleanup()
 
         log.info(f"Starting {self.num_workers} worker processes with torchrun")
 
@@ -78,7 +79,7 @@ class ModelServer:
         if self.process is None:
             return
 
-        self.worker_manager.shutdown_all_workers()
+        self.worker_command.send_to_all("shutdown", {})
 
         # Wait a bit for graceful shutdown
         time.sleep(2)
@@ -91,34 +92,38 @@ class ModelServer:
         log.info("All workers shut down")
         self.process = None
 
-    def run_inference(self, args: dict):
+    def send_request(self, args: dict):
 
         try:
-            self.worker_manager.send_task_to_all_workers("process_task", args)
+            self.worker_command.send_to_all("inference", args)
 
-            # Wait for tasks to complete
             log.info("Waiting for tasks to complete...")
             if not self.worker_status.wait_for_status():
-                log.info(f"inference failed")
+                log.error(f"inference failed for some workers")
 
         except Exception as e:
             log.error(f"Error during workflow: {e}")
         finally:
-            self.stop_workers()
-            self.worker_manager.cleanup_worker_files()
+            # todo should the worker consume command and clean up?
+            self.worker_command.cleanup()
+
+        
 
     def __del__(self):
-        """Cleanup when the object is destroyed."""
-        self.stop_workers()
-        self.worker_manager.cleanup_worker_files()
+        self.cleanup
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         log.info("Exiting ModelServer context")
+        self.cleanup()
+
+    def cleanup(self):
+        log.info("Cleaning up ModelServer")
         self.stop_workers()
-        self.worker_manager.cleanup_worker_files()
+        self.worker_command.cleanup()
+        self.worker_status.cleanup()
 
 
 if __name__ == "__main__":
@@ -134,9 +139,7 @@ if __name__ == "__main__":
 
     num_gpus = int(os.environ.get("NUM_GPU", 1))
     with ModelServer(num_workers=num_gpus) as server:
-        # create dummy parameters for testing
-        # for gradio we need to create stub that can be used as callback
-        args = TransferPipeline.create_model_params()
-        args_dict = {key: value for key, value in vars(args).items()}
-        log.info(f"Model parameters: {json.dumps(args_dict, indent=4)}")
-        server.run_inference(args_dict)
+
+        args, args_dict = TransferPipeline.validate_params()
+
+        server.send_request(args_dict)

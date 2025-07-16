@@ -189,7 +189,7 @@ class TransferPipeline:
                 log.info(f"Saved prompt to {prompt_save_path}")
 
     @staticmethod
-    def create_model_params(
+    def validate_params(
         input_video="assets/example1_input_video.mp4",
         prompt="The video captures a stunning, photorealistic scene with remarkable attention to detail, giving it a lifelike appearance that is almost indistinguishable from reality. It appears to be from a high-budget 4K movie, showcasing ultra-high-definition quality with impeccable resolution.",
         negative_prompt="The video captures a game playing, with bad crappy graphics and cartoonish frames. It represents a recording of old outdated games. The lighting looks very fake. The textures are very raw and basic. The geometries are very primitive. The images are very pixelated and of poor CG quality. There are many subtitles in the footage. Overall, the video is unrealistic at all.",
@@ -227,7 +227,10 @@ class TransferPipeline:
         args.blur_strength = blur_strength
         args.canny_threshold = canny_threshold
 
-        return args
+        args_dict = {key: value for key, value in vars(args).items()}
+        log.info(f"Model parameters: {json.dumps(args_dict, indent=4)}")
+
+        return args, args_dict
 
     def cleanup(self, cfg):
         """Clean up resources"""

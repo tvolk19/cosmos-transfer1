@@ -11,12 +11,12 @@ from typing import Dict, Any, Optional
 from loguru import logger as log
 
 
-class WorkerManager:
+class WorkerCommand:
 
     def __init__(self, num_workers: int):
         self.num_workers = num_workers
 
-    def send_command_to_worker(self, rank: int, command: str, params: Optional[Dict[str, Any]] = None):
+    def _send_command_to_worker(self, rank: int, command: str, params: Optional[Dict[str, Any]] = None):
         command_file = f"/tmp/worker_{rank}_commands.json"
         command_data = {"command": command, "params": params or {}}
 
@@ -25,23 +25,24 @@ class WorkerManager:
 
         log.info(f"Sent command '{command}' to worker {rank}")
 
-    def cleanup_worker_files(self):
+    def cleanup(self):
         for rank in range(self.num_workers):
-            for file_path in [f"/tmp/worker_{rank}_commands.json", f"/tmp/worker_{rank}_status.json"]:
+            for file_path in [f"/tmp/worker_{rank}_commands.json"]:
                 if os.path.exists(file_path):
                     os.remove(file_path)
 
-    def send_task_to_all_workers(self, task_name: str, task_params: Dict[str, Any]):
+    # asynchronous command to all workers
+    def send_to_all(self, task_name: str, task_params: Dict[str, Any]):
         log.info(f"Sending task '{task_name}' to all workers...")
 
         for rank in range(self.num_workers):
-            self.send_command_to_worker(rank, task_name, task_params)
+            self._send_command_to_worker(rank, task_name, task_params)
 
-    def shutdown_all_workers(self):
-        log.info("Shutting down workers...")
+    # def shutdown_all_workers(self):
+    #     log.info("Shutting down workers...")
 
-        for rank in range(self.num_workers):
-            self.send_command_to_worker(rank, "shutdown")
+    #     for rank in range(self.num_workers):
+    #         self._send_command_to_worker(rank, "shutdown")
 
 
 class WorkerStatus:
@@ -82,8 +83,17 @@ class WorkerStatus:
             statuses[rank] = self._get_worker_status(rank, timeout)
 
         for rank, worker_status in statuses.items():
+            # return on first error
+            # TODO we need to report the most severe error
+            # in case of timeout we most likely have a hang. then we should restart the worker?
             if worker_status.get("status") != "success":
                 log.error(f"Worker {rank} failed: {worker_status}")
                 return False
         log.info("All workers reported success")
         return True
+
+    def cleanup(self):
+        for rank in range(self.num_workers):
+            for file_path in [f"/tmp/worker_{rank}_status.json"]:
+                if os.path.exists(file_path):
+                    os.remove(file_path)

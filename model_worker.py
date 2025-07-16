@@ -84,7 +84,7 @@ def worker_main():
                     log.info(f"Worker {rank} running inference with parameters: {params}")
 
                     # Process different commands
-                    if command == "process_task":
+                    if command == "inference":
 
                         # read input parameters from command
                         if pipeline:
@@ -117,7 +117,7 @@ def worker_main():
             time.sleep(0.1)
 
     except KeyboardInterrupt:
-        log.info(f"Worker {rank} interrupted")
+        log.info(f"Worker {rank} keyboard interrupt, shutting down gracefully...")
     finally:
         # Cleanup
         if os.path.exists(command_file):
