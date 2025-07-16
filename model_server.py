@@ -48,7 +48,7 @@ class ModelServer:
             "torchrun",
             f"--nproc_per_node={self.num_workers}",
             f"--master_port={self.master_port}",
-            "worker_sandbox.py",  # TODO args_worker, for now we run worker with default args
+            "model_worker.py",  # TODO args_worker, for now we run worker with default args
         ]
 
         log.info(f"Running command: {' '.join(torchrun_cmd)}")
