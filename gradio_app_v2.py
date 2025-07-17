@@ -47,22 +47,25 @@ def infer_wrapper(
     if keypoint_enable:
         control_types.append("Keypoint")
 
-    _, args_dict = TransferPipeline.validate_params(
-        input_video,
-        prompt,
-        negative_prompt,
-        # vis_weight,
-        # edge_weight,
-        # depth_weight,
-        # seg_weight,
-        # keypoint_weight,
-        guidance_scale,
-        num_steps,
-        seed,
-        sigma_max,
-        blur_strength,
-        canny_threshold,
-    )
+    try:
+        _, args_dict = TransferPipeline.validate_params(
+            input_video,
+            prompt,
+            negative_prompt,
+            vis_weight,
+            edge_weight,
+            depth_weight,
+            seg_weight,
+            keypoint_weight,
+            guidance_scale,
+            num_steps,
+            seed,
+            sigma_max,
+            blur_strength,
+            canny_threshold,
+        )
+    except ValueError as e:
+        return None, f"Error validating parameters: {e}"
 
     model_server.send_request(args_dict)
 

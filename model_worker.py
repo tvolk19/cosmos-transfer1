@@ -12,9 +12,9 @@ import traceback
 import torch.distributed as dist
 from loguru import logger as log
 from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferPipeline
+from worker_manager import WorkerCommand, WorkerStatus
 import sys
 from loguru import logger
-from typing import Dict, Any, Optional
 
 # Configure loguru with custom color for this worker process
 logger.remove()  # Remove default handler
@@ -31,12 +31,10 @@ this function is running in processes started by torchrun.
 """
 
 
-def create_status(status_file: str, rank: int, status: str, message: str = "") -> None:
-    with open(status_file, "w") as f:
-        json.dump(
-            {"rank": rank, "status": status, "result": message},
-            f,
-        )
+class Config:
+    output_dir = os.getenv("OUTPUT_DIR", "/mnt/pvc/gradio_outdir")
+    model_module = os.getenv("MODEL_MODULE")
+    model_class = os.getenv("MODEL_CLASS")
 
 
 def worker_main():
@@ -46,84 +44,66 @@ def worker_main():
     """
     rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    log.info(f"Worker init {rank}/{world_size}")
+    log.info(f"Worker init {rank+1}/{world_size}")
 
-    # Create a simple control loop to wait for commands
-    command_file = f"/tmp/worker_{rank}_commands.json"
-    status_file = f"/tmp/worker_{rank}_status.json"
+    worker_cmd = WorkerCommand(world_size)
+    worker_status = WorkerStatus(world_size)
 
     try:
 
         pipeline = None
-        if os.getenv("MODEL_MODULE") and os.getenv("MODEL_CLASS"):
+        if Config.model_module and Config.model_class:
             # Dynamically import the model module and class
-            model_module = os.getenv("MODEL_MODULE")
-            model_class = os.getenv("MODEL_CLASS")
             # module = __import__(model_module, fromlist=[model_class])
             # model_class = getattr(module, model_class)
-            log.info(f"Using model {model_class} from module {model_module}")
-            pipeline = TransferPipeline(num_gpus=world_size)
+            log.info(f"initializing model {Config.model_class} from module {Config.model_module}")
+            pipeline = TransferPipeline(num_gpus=world_size, output_dir=Config.output_dir)
         else:
-            log.error("MODEL_MODULE and MODEL_CLASS environment variables are not set.")
+            log.error("initializing model: MODEL_MODULE and MODEL_CLASS environment variables are not set.")
+            time.sleep(10)
 
-        # Signal that worker is ready
-        with open(status_file, "w") as f:
-            json.dump({"status": "success", "rank": rank, "pid": os.getpid()}, f)
+        worker_status.signal_status(rank, "success", "Worker initialized successfully")
 
         while True:
-            # Check for new commands
-            if os.path.exists(command_file):
-                try:
-                    with open(command_file, "r") as f:
-                        command_data = json.load(f)
+            try:
+                command_data = worker_cmd.wait_for_command(rank)
+                command = command_data.get("command")
+                params = command_data.get("params", {})
 
-                    command = command_data.get("command")
-                    params = command_data.get("params", {})
+                log.info(f"Worker {rank} running {command=} with parameters: {params}")
 
-                    log.info(f"Worker {rank} received command: {command}")
-                    log.info(f"Worker {rank} running inference with parameters: {params}")
+                # Process different commands
+                if command == "inference":
 
-                    # Process different commands
-                    if command == "inference":
-
-                        # read input parameters from command
-                        if pipeline:
-                            # Create model parameters from params
-                            params = TransferPipeline.create_model_params(**params)
-                            pipeline.infer(params)
-
-                        # Update status with result
-                        create_status(status_file, rank, "success", "result_placeholder")
-                    elif command == "shutdown":
-                        log.info(f"Worker {rank} shutting down")
-                        break
+                    # read input parameters from command
+                    if pipeline:
+                        # Create model parameters from params
+                        params, _ = TransferPipeline.validate_params(**params)
+                        pipeline.infer(params)
                     else:
-                        log.warning(f"Worker {rank} received unknown command: {command}")
-                        create_status(status_file, rank, "error", f"Unknown command: {command}")
+                        log.error("run inference: Pipeline is not initialized")
+                        time.sleep(10)
 
-                    # Remove command file after processing
-                    os.remove(command_file)
+                    worker_status.signal_status(rank, "success", "result_placeholder")
+                elif command == "shutdown":
+                    log.info(f"Worker {rank} shutting down")
+                    break
+                else:
+                    log.warning(f"Worker {rank} received unknown command: {command}")
+                    worker_status.signal_status(rank, "error", f"Unknown command: {command}")
 
-                except Exception as e:
-                    log.error(f"Worker {rank} error processing command: {e}")
-                    error_trace = traceback.format_exc()
-                    log.error(f"Stack trace:\n{error_trace}")
+            except Exception as e:
+                log.error(f"Worker {rank} error processing command: {e}")
+                error_trace = traceback.format_exc()
+                log.error(f"Stack trace:\n{error_trace}")
 
-                    create_status(status_file, rank, "error", str(e))
-                    if os.path.exists(command_file):
-                        os.remove(command_file)
-
-            # Sleep briefly to avoid busy waiting
-            time.sleep(0.1)
+                worker_status.signal_status(rank, "error", str(e))
 
     except KeyboardInterrupt:
         log.info(f"Worker {rank} keyboard interrupt, shutting down gracefully...")
     finally:
-        # Cleanup
-        if os.path.exists(command_file):
-            os.remove(command_file)
-        if os.path.exists(status_file):
-            os.remove(status_file)
+        worker_cmd.cleanup()
+        worker_status.cleanup()
 
         # Cleanup distributed
         if dist.is_initialized():

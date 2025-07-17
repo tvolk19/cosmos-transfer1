@@ -32,17 +32,26 @@ class WorkerCommand:
                     os.remove(file_path)
 
     # asynchronous command to all workers
-    def send_to_all(self, task_name: str, task_params: Dict[str, Any]):
-        log.info(f"Sending task '{task_name}' to all workers...")
+    def broadcast(self, task_name: str, task_params: Dict[str, Any]):
+        log.info(f"Broadcasting task '{task_name}' to all workers...")
 
         for rank in range(self.num_workers):
             self._send_command_to_worker(rank, task_name, task_params)
 
-    # def shutdown_all_workers(self):
-    #     log.info("Shutting down workers...")
+    def wait_for_command(self, rank: int) -> Optional[Dict[str, Any]]:
+        command_file = f"/tmp/worker_{rank}_commands.json"
+        log.info(f"worker {rank}: Waiting for command file {command_file}")
+        while not os.path.exists(command_file):
+            time.sleep(0.5)
 
-    #     for rank in range(self.num_workers):
-    #         self._send_command_to_worker(rank, "shutdown")
+        try:
+            with open(command_file, "r") as f:
+                command_data = json.load(f)
+            os.remove(command_file)  # Remove command file after reading
+            return command_data
+        except Exception as e:
+            log.error(f"Failed to read command file for worker {rank}: {e}")
+            raise e
 
 
 class WorkerStatus:
@@ -50,12 +59,23 @@ class WorkerStatus:
     def __init__(self, num_workers: int):
         self.num_workers = num_workers
 
+    def signal_status(self, rank: int, status: str, message: str = "") -> None:
+        status_file = f"/tmp/worker_{rank}_status.json"
+
+        log.info(f"worker {rank} status: {status}, message: {message}")
+        with open(status_file, "w") as f:
+            json.dump(
+                {"rank": rank, "status": status, "result": message},
+                f,
+            )
+
     def _get_worker_status(self, rank: int, timeout: int = 1800) -> Dict[str, Any]:
         status_file = f"/tmp/worker_{rank}_status.json"
         start_time = time.time()
 
         while not os.path.exists(status_file):
             if time.time() - start_time > timeout:
+                os.remove(status_file)
                 return {"status": "timeout", "rank": rank}
             time.sleep(0.5)
 
@@ -64,6 +84,7 @@ class WorkerStatus:
                 status = json.load(f)
 
             # remove status file so we can do a blocking wait for next status
+            log.info(f"Worker {rank} removing status file {status_file}")
             os.remove(status_file)
 
             assert os.path.exists(status_file) is False, "status file should be removed after processing"

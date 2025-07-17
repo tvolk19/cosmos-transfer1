@@ -79,7 +79,7 @@ class ModelServer:
         if self.process is None:
             return
 
-        self.worker_command.send_to_all("shutdown", {})
+        self.worker_command.broadcast("shutdown", {})
 
         # Wait a bit for graceful shutdown
         time.sleep(2)
@@ -95,7 +95,7 @@ class ModelServer:
     def send_request(self, args: dict):
 
         try:
-            self.worker_command.send_to_all("inference", args)
+            self.worker_command.broadcast("inference", args)
 
             log.info("Waiting for tasks to complete...")
             if not self.worker_status.wait_for_status():
@@ -106,8 +106,6 @@ class ModelServer:
         finally:
             # todo should the worker consume command and clean up?
             self.worker_command.cleanup()
-
-        
 
     def __del__(self):
         self.cleanup
@@ -142,4 +140,5 @@ if __name__ == "__main__":
 
         args, args_dict = TransferPipeline.validate_params()
 
+        server.send_request(args_dict)
         server.send_request(args_dict)

@@ -28,9 +28,8 @@ The pipeline is configured for to NOT offload the models in favor of speed.
 
 For now we assume a fixed configuration of the controlnets for the lifetime of the pipeline.
 This makes the config.json file for the controlnets a init parameter of the pipeline.
-TODO we have to see how to configure different controlnet configurations and set respective control weights.
 
-TODO can we load all controlnets at once?
+TODO can we load all controlnets at once? otherwise need to configure control nets
 
 TODO batch support
 
@@ -41,9 +40,7 @@ TODO av support
 
 class TransferPipeline:
     def __init__(
-        self,
-        num_gpus: int = 1,
-        checkpoint_dir: str = "/mnt/pvc/cosmos-transfer1",
+        self, num_gpus: int = 1, checkpoint_dir: str = "/mnt/pvc/cosmos-transfer1", output_dir: str = "outputs/"
     ):
 
         self.pipeline = None
@@ -64,7 +61,7 @@ class TransferPipeline:
 
         self.control_inputs = self.create_controlnet_spec(checkpoint_dir=checkpoint_dir)
 
-        self.video_save_folder = "outputs/"
+        self.output_dir = output_dir
         self.video_save_name = "output"
 
         self.pipeline = DiffusionControl2WorldGenerationPipeline(
@@ -126,7 +123,55 @@ class TransferPipeline:
 
         return control_inputs
 
-    def infer(self, cfg):
+    def set_control_weights(
+        self,
+        vis_weight=0,
+        edge_weight=1,
+        depth_weight=0,
+        seg_weight=0,
+        keypoint_weight=0,
+    ):
+        if vis_weight > 0:
+            if "vis" not in self.control_inputs:
+                log.warning("Visual control network is not configured is this network. Ignoring vis_weight.")
+            else:
+                self.control_inputs["vis"]["control_weight"] = vis_weight
+
+        if edge_weight > 0:
+            if "edge" not in self.control_inputs:
+                log.warning("Edge control network is not configured is this network. Ignoring edge_weight.")
+            else:
+                self.control_inputs["edge"]["control_weight"] = edge_weight
+
+        if depth_weight > 0:
+            if "depth" not in self.control_inputs:
+                log.warning("Depth control network is not configured is this network. Ignoring depth_weight.")
+            else:
+                self.control_inputs["depth"]["control_weight"] = depth_weight
+
+        if seg_weight > 0:
+            if "seg" not in self.control_inputs:
+                log.warning("Segment control network is not configured is this network. Ignoring seg_weight.")
+            else:
+                self.control_inputs["seg"]["control_weight"] = seg_weight
+
+        if keypoint_weight > 0:
+            if "keypoint" not in self.control_inputs:
+                log.warning("Keypoint control network is not configured is this network. Ignoring keypoint_weight.")
+            else:
+                self.control_inputs["keypoint"]["control_weight"] = keypoint_weight
+
+        log.info(f"control_inputs: {json.dumps(self.control_inputs, indent=4)}")
+
+    def infer(self, params):
+
+        self.set_control_weights(
+            vis_weight=params.vis_weight,
+            edge_weight=params.edge_weight,
+            depth_weight=params.depth_weight,
+            seg_weight=params.seg_weight,
+            keypoint_weight=params.keypoint_weight,
+        )
 
         # original code is creating deepcopy. are values touched?
         # TODO add control weights as inference parameter
@@ -135,10 +180,10 @@ class TransferPipeline:
 
         log.info("Running preprocessor")
         self.preprocessors(
-            cfg.input_video,
-            cfg.prompt,
+            params.input_video,
+            params.prompt,
             current_control_inputs,
-            self.video_save_folder,
+            self.output_dir,
         )
 
         # TODO: add support for regional prompts and region definitions
@@ -148,19 +193,19 @@ class TransferPipeline:
             self.pipeline.region_definitions = []
 
         # WAR these inference parameters are for unknown reasons not part of the generate function
-        self.pipeline.guidance = cfg.guidance
-        self.pipeline.num_steps = cfg.num_steps
-        self.pipeline.seed = cfg.seed
-        self.pipeline.sigma_max = cfg.sigma_max
-        self.pipeline.blur_strength = cfg.blur_strength
-        self.pipeline.canny_threshold = cfg.canny_threshold
+        self.pipeline.guidance = params.guidance
+        self.pipeline.num_steps = params.num_steps
+        self.pipeline.seed = params.seed
+        self.pipeline.sigma_max = params.sigma_max
+        self.pipeline.blur_strength = params.blur_strength
+        self.pipeline.canny_threshold = params.canny_threshold
 
         batch_outputs = self.pipeline.generate(
-            prompt=[cfg.prompt],
-            video_path=[cfg.input_video],
-            negative_prompt=cfg.negative_prompt,
+            prompt=[params.prompt],
+            video_path=[params.input_video],
+            negative_prompt=params.negative_prompt,
             control_inputs=[current_control_inputs],
-            save_folder=self.video_save_folder,
+            save_folder=self.output_dir,
             batch_size=1,
         )
 
@@ -168,8 +213,8 @@ class TransferPipeline:
             videos, final_prompts = batch_outputs
             for i, (video, prompt) in enumerate(zip(videos, final_prompts)):
 
-                video_save_path = os.path.join(self.video_save_folder, f"{self.video_save_name}.mp4")
-                prompt_save_path = os.path.join(self.video_save_folder, f"{self.video_save_name}.txt")
+                video_save_path = os.path.join(self.output_dir, f"{self.video_save_name}.mp4")
+                prompt_save_path = os.path.join(self.output_dir, f"{self.video_save_name}.txt")
                 os.makedirs(os.path.dirname(video_save_path), exist_ok=True)
 
                 save_video(
@@ -193,6 +238,11 @@ class TransferPipeline:
         input_video="assets/example1_input_video.mp4",
         prompt="The video captures a stunning, photorealistic scene with remarkable attention to detail, giving it a lifelike appearance that is almost indistinguishable from reality. It appears to be from a high-budget 4K movie, showcasing ultra-high-definition quality with impeccable resolution.",
         negative_prompt="The video captures a game playing, with bad crappy graphics and cartoonish frames. It represents a recording of old outdated games. The lighting looks very fake. The textures are very raw and basic. The geometries are very primitive. The images are very pixelated and of poor CG quality. There are many subtitles in the footage. Overall, the video is unrealistic at all.",
+        vis_weight=0.5,
+        edge_weight=0.5,
+        depth_weight=0.5,
+        seg_weight=0.5,
+        keypoint_weight=0.5,
         guidance=5,
         num_steps=35,
         seed=1,
@@ -202,14 +252,14 @@ class TransferPipeline:
     ):
         args = argparse.Namespace()
 
+        if sigma_max < 80 and not input_video:
+            raise ValueError("Must have 'input_video' specified if sigma_max < 80")
+
+        # TODO: edge, canny need input_video
+        # TODO depth, seg, keypoint need either input_video OR input_control
         # for hint_key, config in controlnet_specs.items():
-        #     if hint_key not in valid_hint_keys:
-        #         raise ValueError(f"Invalid hint_key: {hint_key}. Must be one of {valid_hint_keys}")
 
-        #     if not input_video_path and sigma_max < 80:
-        #         raise ValueError("Must have 'input_video' specified if sigma_max < 80")
-
-        #     if not input_video_path and "input_control" not in config:
+        #     if not input_video and "input_control" not in config:
         #         raise ValueError(
         #             f"{hint_key} controlnet must have 'input_control' video specified if no 'input_video' specified."
         #         )
@@ -218,6 +268,13 @@ class TransferPipeline:
         args.input_video = input_video
         args.prompt = prompt
         args.negative_prompt = negative_prompt
+
+        # Control weights
+        args.vis_weight = vis_weight
+        args.edge_weight = edge_weight
+        args.depth_weight = depth_weight
+        args.seg_weight = seg_weight
+        args.keypoint_weight = keypoint_weight
 
         # Generation parameters
         args.guidance = guidance
@@ -244,7 +301,7 @@ class TransferPipeline:
 
 if __name__ == "__main__":
     pipeline = TransferPipeline(num_gpus=int(os.environ.get("NUM_GPU", 1)))
-    model_params = TransferPipeline.create_model_params()
+    model_params, _ = TransferPipeline.validate_params()
     pipeline.infer(model_params)
 
     log.info("Inference complete****************************************")
