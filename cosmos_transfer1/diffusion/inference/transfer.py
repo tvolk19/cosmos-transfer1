@@ -43,7 +43,7 @@ torch.enable_grad(False)
 torch.serialization.add_safe_globals([BytesIO])
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(cmd_line: str = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Control to world generation demo script", conflict_handler="resolve")
 
     # Add transfer specific arguments
@@ -90,14 +90,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--controlnet_specs",
         type=str,
+        default="assets/inference_cosmos_transfer1_single_control_edge.json",
         help="Path to JSON file specifying multicontrolnet configurations",
-        required=True,
+        # required=True,
     )
     parser.add_argument(
         "--is_av_sample", action="store_true", help="Whether the model is an driving post-training model"
     )
     parser.add_argument(
-        "--checkpoint_dir", type=str, default="checkpoints", help="Base directory containing model checkpoints"
+        "--checkpoint_dir",
+        type=str,
+        default="/mnt/pvc/cosmos-transfer1",
+        help="Base directory containing model checkpoints",
     )
     parser.add_argument(
         "--tokenizer_dir",
@@ -155,7 +159,10 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--use_distilled", action="store_true", help="Use distilled ControlNet model variant")
 
-    cmd_args = parser.parse_args()
+    if cmd_line:
+        cmd_args = parser.parse_args(cmd_line.split())
+    else:
+        cmd_args = parser.parse_args()
 
     # Load and parse JSON input
     control_inputs, json_args = load_controlnet_specs(cmd_args)
@@ -199,6 +206,8 @@ def demo(cfg, control_inputs):
     """
 
     control_inputs = validate_controlnet_specs(cfg, control_inputs)
+    log.info(f"control_inputs: {json.dumps(control_inputs, indent=4)}")
+
     misc.set_random_seed(cfg.seed)
 
     device_rank = 0
@@ -382,6 +391,12 @@ def demo(cfg, control_inputs):
         dist.destroy_process_group()
 
 
+def demo_wrapper():
+    cmd_line = ""
+    args, control_inputs = parse_arguments(cmd_line)
+    demo(args, control_inputs)
+
+
 if __name__ == "__main__":
-    args, control_inputs = parse_arguments()
+    args, control_inputs = parse_arguments("")
     demo(args, control_inputs)

@@ -68,6 +68,9 @@ from cosmos_transfer1.diffusion.inference.inference_utils import (
     split_video_into_patches,
     valid_hint_keys,
 )
+
+from cosmos_transfer1.utils.misc import force_gc
+
 from cosmos_transfer1.diffusion.model.model_ctrl import (
     VideoDiffusionModelWithCtrl,
     VideoDiffusionT2VModelWithCtrl,
@@ -742,6 +745,8 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
                     all_prompt_embeddings.append((emb, None))
         log.info("Finish text embedding on prompt")
 
+        force_gc("After finishing text embedding")
+
         # Generate videos in batches
         log.info("Run generation")
 
@@ -754,6 +759,8 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
             control_inputs_list=safe_control_inputs,
         )
         log.info("Finish generation")
+
+        force_gc("After finishing generation")
 
         log.info("Run guardrail on generated videos")
         for i, video in enumerate(videos):

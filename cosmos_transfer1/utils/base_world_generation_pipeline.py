@@ -23,6 +23,7 @@ import torch
 
 from cosmos_transfer1.auxiliary.guardrail.common import presets as guardrail_presets
 from cosmos_transfer1.checkpoints import T5_MODEL_CHECKPOINT
+from cosmos_transfer1.utils.misc import ScopeMemoryTimer
 from cosmos_transfer1.utils.t5_text_encoder import CosmosT5TextEncoder
 
 
@@ -76,14 +77,18 @@ class BaseWorldGenerationPipeline(ABC):
         self._load_model()
 
         if not self.offload_text_encoder_model:
+            t = ScopeMemoryTimer("T5")
             self._load_text_encoder_model()
         if not self.offload_guardrail_models:
+            t = ScopeMemoryTimer("guardrail")
             if self.has_text_input:
                 self._load_text_guardrail()
             self._load_video_guardrail()
         if not self.offload_network:
+            t = ScopeMemoryTimer("network")
             self._load_network()
         if not self.offload_tokenizer:
+            t = ScopeMemoryTimer("tokenizer")
             self._load_tokenizer()
 
     def _load_tokenizer(self):
