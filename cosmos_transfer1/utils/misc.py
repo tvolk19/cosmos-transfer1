@@ -37,6 +37,104 @@ from torch.distributed._tensor.api import DTensor
 from cosmos_transfer1.utils import distributed, log
 
 
+import gc
+import torch
+import pynvml
+import inspect
+
+
+def get_gpu_mem():
+    try:
+        pynvml.nvmlInit()
+        meminfo = pynvml.nvmlDeviceGetMemoryInfo(pynvml.nvmlDeviceGetHandleByIndex(0))
+        return meminfo.used / meminfo.total * 100
+    except pynvml.NVMLError as error:
+        log.error(f"Failed to get GPU memory info: {error}")
+        return 0
+
+
+def print_gpu_memory(str=None):
+    try:
+        pynvml.nvmlInit()
+        meminfo = pynvml.nvmlDeviceGetMemoryInfo(pynvml.nvmlDeviceGetHandleByIndex(0))
+        log.info(
+            f"{str}: {meminfo.used/1024/1024}/{meminfo.total/1024/1024}MiB used ({meminfo.free/1024/1024}MiB free)"
+        )
+    except pynvml.NVMLError as error:
+        log.error(f"Failed to get GPU memory info: {error}")
+
+
+def force_gc(msg=""):
+    mem0 = get_gpu_mem()
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    mem1 = get_gpu_mem()
+    log.info(f"GC: GPU memm: {mem0:.2f}% -> {mem1:.2f}% {msg}")
+
+
+class MemoryTimer(ContextDecorator):
+
+    def __init__(self, context: str = ""):
+        self.context = context
+        self.start_memory = 0
+        self.end_memory = 0
+        self.start_time = 0
+        self.end_time = 0
+
+    def __enter__(self):
+        self.start_memory = get_gpu_mem()
+        self.start_time = time.time()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end_memory = get_gpu_mem()
+        self.end_time = time.time()
+
+        memory_diff = self.end_memory - self.start_memory
+        time_elapsed = self.end_time - self.start_time
+
+        context_str = f" [{self.context}]" if self.context else ""
+        log.info(f"Memory{context_str}: {self.start_memory:.2f}% -> {self.end_memory:.2f}% (Δ{memory_diff:+.2f}%)")
+        log.info(f"Time{context_str}: {time_elapsed:.4f} seconds")
+
+
+class ScopeMemoryTimer:
+
+    def __init__(self, context: str = ""):
+        self.context = context
+        self.end_memory = 0
+        self.end_time = 0
+        self.start_memory = get_gpu_mem()
+        self.start_time = time.time()
+
+    def __del__(self):
+        self.end_memory = get_gpu_mem()
+        self.end_time = time.time()
+
+        memory_diff = self.end_memory - self.start_memory
+        time_elapsed = self.end_time - self.start_time
+
+        context_str = f" [{self.context}]" if self.context else ""
+        log.info(
+            f"Memory{context_str}: {self.start_memory:.2f}% -> {self.end_memory:.2f}% (Δ{memory_diff:+.2f}%)  Time{context_str}: {time_elapsed:.4f} seconds"
+        )
+
+
+if __name__ == "__main__":
+    # Example usage of MemoryTimer
+    with MemoryTimer("Example Context"):
+        # Simulate some work
+        time.sleep(1)
+
+    # Example usage of ScopeMemoryTimer
+    frame = inspect.currentframe()
+    timer = ScopeMemoryTimer(f"Scope Example")
+    time.sleep(1)
+    # del timer  # This will trigger the memory and time logging upon deletion
+
+
 def extract_video_frames(video_path, number_of_frames=2):
     cap = cv2.VideoCapture(video_path)
     frame_paths = []

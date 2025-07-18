@@ -15,6 +15,8 @@ from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferPipel
 from worker_manager import WorkerCommand, WorkerStatus
 import sys
 from loguru import logger
+import gc
+import torch
 
 # Configure loguru with custom color for this worker process
 logger.remove()  # Remove default handler
@@ -40,7 +42,7 @@ class Config:
 def worker_main():
     """
     Worker function that runs in each distributed process.
-    Has a control loop to wait for input from the main function.
+    Has a control loop to wait for input from the model server.
     """
     rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
@@ -58,6 +60,8 @@ def worker_main():
             # model_class = getattr(module, model_class)
             log.info(f"initializing model {Config.model_class} from module {Config.model_module}")
             pipeline = TransferPipeline(num_gpus=world_size, output_dir=Config.output_dir)
+            gc.collect()
+            torch.cuda.empty_cache()
         else:
             log.error("initializing model: MODEL_MODULE and MODEL_CLASS environment variables are not set.")
             time.sleep(10)

@@ -21,10 +21,10 @@ class ModelServer:
     A class to manage distributed worker processes using torchrun.
     """
 
-    def __init__(self, num_workers: int = 2, master_port: int = 12345, backend: str = "nccl"):
+    def __init__(self, num_workers: int = 2):
 
         self.num_workers = num_workers
-        self.master_port = master_port
+        # self.master_port = master_port
         # self.backend = backend
         self.process = None
         self.worker_command = WorkerCommand(num_workers)
@@ -34,9 +34,9 @@ class ModelServer:
 
     def _setup_environment(self):
         self.env = os.environ.copy()
-        self.env["MASTER_ADDR"] = "localhost"
-        self.env["MASTER_PORT"] = str(self.master_port)
-        self.env["WORLD_SIZE"] = str(self.num_workers)
+        # self.env["MASTER_ADDR"] = "localhost"
+        # self.env["MASTER_PORT"] = str(self.master_port)
+        # self.env["WORLD_SIZE"] = str(self.num_workers)
 
     def start_workers(self):
 
@@ -48,7 +48,9 @@ class ModelServer:
         torchrun_cmd = [
             "torchrun",
             f"--nproc_per_node={self.num_workers}",
-            f"--master_port={self.master_port}",
+            f"--nnodes=1",
+            f"--node_rank=0",
+            # f"--master_port={self.master_port}",
             "model_worker.py",  # TODO args_worker, for now we run worker with default args
         ]
 

@@ -18,6 +18,7 @@ from cosmos_transfer1.diffusion.inference.preprocessors import Preprocessors
 from cosmos_transfer1.diffusion.inference.world_generation_pipeline import DiffusionControl2WorldGenerationPipeline
 from cosmos_transfer1.utils import log
 from cosmos_transfer1.utils.io import save_video
+from cosmos_transfer1.utils.misc import force_gc
 
 """
 pipeline class similar to demo function.
@@ -32,6 +33,8 @@ This makes the config.json file for the controlnets a init parameter of the pipe
 TODO can we load all controlnets at once? otherwise need to configure control nets
 
 TODO batch support
+
+TODO regional prompt support
 
 TODO av support
 
@@ -70,13 +73,14 @@ class TransferPipeline:
             control_inputs=self.control_inputs,
             process_group=self.process_group,
             offload_network=False,
-            offload_text_encoder_model=False,
+            offload_text_encoder_model=True,
             offload_guardrail_models=False,
             offload_prompt_upsampler=False,
             upsample_prompt=False,
             fps=24,
             num_input_frames=24,
         )
+        force_gc("After initializing pipeline")
 
     def create_controlnet_spec(
         self,
@@ -185,6 +189,7 @@ class TransferPipeline:
             current_control_inputs,
             self.output_dir,
         )
+        force_gc("After running preprocessor")
 
         # TODO: add support for regional prompts and region definitions
         if hasattr(self.pipeline, "regional_prompts"):
@@ -208,6 +213,7 @@ class TransferPipeline:
             save_folder=self.output_dir,
             batch_size=1,
         )
+        force_gc("After generating batch outputs")
 
         if self.device_rank == 0:
             videos, final_prompts = batch_outputs
