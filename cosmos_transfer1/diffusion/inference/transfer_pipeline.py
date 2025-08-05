@@ -162,8 +162,11 @@ class TransferValidator:
         if not input_video_path:
             for key in controlnet_specs:
                 if key == "vis" or key == "edge":
+                    # vis and edge will always create an input control from the input video
+                    # vis creates a blur video, edge creates a canny video
                     raise ValueError(f"Controlnet '{key}' requires an input video. Please specify 'input_video_path'.")
                 else:
+                    # all other controlnets require an input control video ONLY if input control is not provided
                     controlnet = controlnet_specs.get(key)
                     if not controlnet.get("input_control"):
                         raise ValueError(f"Controlnet '{key}' requires an 'input_control' video OR input_video_path.")
@@ -326,7 +329,7 @@ class TransferPipeline:
         )
 
         if config_changed:
-            self.pipeline.reload_model(self.control_inputs)
+            self.pipeline.reload_model()
 
         # original code is creating deepcopy. are values touched?
         # TODO add control weights as inference parameter
