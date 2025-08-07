@@ -15,6 +15,7 @@
 
 from cosmos_transfer1.utils import log
 from server.model_server import ModelServer
+from server.model_server_cli import ModelServerCli
 
 
 def create_worker_pipeline(cfg, create_model=True):
@@ -25,6 +26,11 @@ def create_worker_pipeline(cfg, create_model=True):
 
 
 def create_pipeline(cfg):
+    if cfg.use_cli:
+        pipeline = ModelServerCli(num_workers=cfg.num_gpus)
+        validator = None
+        return pipeline, validator
+    
     if cfg.num_gpus == 1:
         pipeline, validator = create_worker_pipeline(cfg)
     else:
