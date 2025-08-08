@@ -12,24 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import json
 import os
 import subprocess
-import json
 from cosmos_transfer1.utils import log
+from server.deploy_config import Config
+from gradio_util import get_output_folder, get_outputs
 
 
-class ModelServerCli:
+class GradioCLIApp:
     """Most basic server using an existing CLI model.
-
+    The parameter validation is left to the CLI app.
     This server has no communication channel with the workers, so no errors are reported."""
 
     def __init__(self, num_workers: int = 8, checkpoint_dir: str = "checkpoints"):
-        """Initialize the model server and start worker processes.
-        Args:
-            num_workers (int): Number of worker processes to create (default: 2)
-
-        """
-
         self.num_workers = num_workers
         self.checkpoint_dir = checkpoint_dir
         self.process = None
@@ -38,8 +35,11 @@ class ModelServerCli:
     def _setup_environment(self):
         self.env = os.environ.copy()
 
-    def infer(self, args: dict, output_dir: str = "outputs/"):
-        """Execute inference across all worker processes."""
+    def infer_dict(self, args: dict, output_dir=None):
+        if output_dir is None:
+            output_dir = get_output_folder(Config.output_dir)
+        else:
+            os.makedirs(output_dir, exist_ok=True)
 
         log.info(f"Starting {self.num_workers} worker processes with torchrun")
         cli_cmd = "cosmos_transfer1/diffusion/inference/transfer.py"
@@ -58,6 +58,8 @@ class ModelServerCli:
             "--nnodes=1",
             "--node_rank=0",
             cli_cmd,
+            "--offload_diffusion_transformer",
+            "--offload_guardrail_models",
             f"--checkpoint_dir={self.checkpoint_dir}",
             f"--num_gpus={self.num_workers}",
             f"--controlnet_specs={args_file}",
@@ -89,25 +91,16 @@ class ModelServerCli:
             log.error(f"Error running inference: {e}")
             raise e
 
-    def __del__(self):
-        """Destructor to ensure cleanup on garbage collection."""
-        self.cleanup()
+        return get_outputs(output_dir)
 
-    def __enter__(self):
-        """Enter the context manager.
+    def infer(
+        self,
+        request_text,
+        output_folder=None,
+    ):
+        try:
+            request_data = json.loads(request_text)
+        except json.JSONDecodeError as e:
+            return None, f"Error parsing request JSON: {e}\nPlease ensure your request is valid JSON."
 
-        Returns:
-            ModelServer: Self reference for context manager usage
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit the context manager and perform cleanup.
-        Ensures proper cleanup regardless of whether an exception occurred.
-        """
-        log.info("Exiting ModelServer context")
-        self.cleanup()
-
-    def cleanup(self):
-        """Clean up server resources and shutdown workers."""
-        log.info("Cleaning up ModelServer")
+        return self._infer(request_data, output_folder)
