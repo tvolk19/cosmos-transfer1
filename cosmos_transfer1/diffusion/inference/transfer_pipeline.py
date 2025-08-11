@@ -245,13 +245,23 @@ class TransferPipeline:
 
         # TODO FIXME: we want to run W/O offloading. therefore we need to give the model at least one control input.
         self.valid_hint_keys = hint_keys
-        first_key = next(iter(self.valid_hint_keys))
-        self.control_inputs = {
-            first_key: {
-                "ckpt_path": os.path.join(checkpoint_dir, default_model_names[first_key]),
+        # first_key = next(iter(self.valid_hint_keys))
+        # self.control_inputs = {
+        #     first_key: {
+        #         "ckpt_path": os.path.join(checkpoint_dir, default_model_names[first_key]),
+        #         "control_weight": 0.5,
+        #     },
+        # }
+
+        self.control_inputs = {}
+
+        # need to change for AV
+        for key in ["vis", "edge", "depth", "seg"]:
+            # for key in ["vis"]:
+            self.control_inputs[key] = {
+                "ckpt_path": os.path.join(checkpoint_dir, default_model_names[key]),
                 "control_weight": 0.5,
-            },
-        }
+            }
 
         self.checkpoint_dir = checkpoint_dir
         self.video_save_name = "output"

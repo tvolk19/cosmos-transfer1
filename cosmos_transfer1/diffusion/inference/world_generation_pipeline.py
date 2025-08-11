@@ -325,11 +325,13 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
     # load the hint encoders. these encoders are run along with the main model to provide additional context
     def _load_network(self):
         # This load seems to be non-functional for av-sample checkpoints. The base_model loading in build_model is required
+        log.info(f"Loading model: {self.model_name} with checkpoint: {self.checkpoint_name}")
         if self.checkpoint_name == "":
             load_network_model(self.model, "")
         else:
             load_network_model(self.model, f"{self.checkpoint_dir}/{self.checkpoint_name}")
         if len(self.control_inputs) > 1:
+            log.info("Loading hint encoders for multi-control to model.hint_encoders")
             hint_encoders = torch.nn.ModuleList([])
             for key, spec in self.control_inputs.items():
                 if key in valid_hint_keys:
@@ -347,6 +349,7 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
             self.model.hint_encoders = hint_encoders
         else:
             for _, spec in self.control_inputs.items():
+                log.info("Loading single hint encoder as part of model.model")
                 log.info(f"Loading ctrl model from ckpt_path: {spec['ckpt_path']}")
 
                 if os.path.exists(spec["ckpt_path"]):
@@ -357,11 +360,15 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
                     )
                 non_strict_load_model(self.model.model, net_state_dict)
 
+        log.info(
+            f"Model loaded successfully. self.model.model.hint_encoders: {hasattr(self.model.model, 'hint_encoders')}"
+        )
         if self.process_group is not None:
             log.info("Enabling CP in base model")
             self.model.model.net.enable_context_parallel(self.process_group)
             self.model.model.base_model.net.enable_context_parallel(self.process_group)
             if hasattr(self.model.model, "hint_encoders"):
+                assert 0  # this code is never hit
                 log.info("Enabling CP in hint encoders")
                 self.model.model.hint_encoders.net.enable_context_parallel(self.process_group)
 
@@ -409,6 +416,7 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
 
     def reload_model(self):
         if hasattr(self.model, "hint_encoders"):
+            log.info("deleting model.hint_encoders")
             del self.model.hint_encoders
 
         self._offload_network()
