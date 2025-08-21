@@ -1,14 +1,12 @@
-import os
 import json
+import os
 from pathlib import Path
+
+from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferValidator, hint_keys
 from cosmos_transfer1.utils import log
-from cosmos_transfer1.diffusion.inference.transfer_pipeline import (
-    TransferValidator,
-    hint_keys,
-)
 from server.deploy_config import Config
-from server.model_server import ModelServer
 from server.gradio_app_cli import GradioCLIApp
+from server.model_server import ModelServer
 
 
 def get_spec(spec_file):
@@ -18,7 +16,6 @@ def get_spec(spec_file):
 
 
 def test_model_server_cli():
-
     folder = "outputs/"
     app = GradioCLIApp(num_workers=Config.num_gpus, checkpoint_dir=Config.checkpoint_dir)
 
@@ -31,7 +28,6 @@ av_prompt = "The video is captured from a camera mounted on a car. The camera is
 
 
 def get_parameters(json_file):
-
     if "sample_av_mv" in json_file.name:
         log.info(f"Skipping {json_file.name} (contains 'sample_av_mv')")
         return None
@@ -50,7 +46,6 @@ def get_parameters(json_file):
 
 
 def test_model_server_cli_batch(input_folder):
-
     app = GradioCLIApp(num_workers=Config.num_gpus, checkpoint_dir=Config.checkpoint_dir)
     app1 = GradioCLIApp(num_workers=1, checkpoint_dir=Config.checkpoint_dir)
 
@@ -70,7 +65,6 @@ def test_model_server_cli_batch(input_folder):
 
     # Process each JSON file
     for json_file in json_files:
-
         log.info(f"Processing {json_file.name}...")
 
         # if "inference_cosmos" in json_file.name:
@@ -100,7 +94,6 @@ def test_model_server_cli_batch(input_folder):
 
 
 def test_model_server():
-
     folder = "outputs/"
     with ModelServer(num_workers=Config.num_gpus) as pipeline:
         validator = TransferValidator(hint_keys=hint_keys)

@@ -15,11 +15,13 @@
 
 import json
 from io import BytesIO
-from typing import Dict, List
 from pathlib import Path
+from typing import Dict, List
+
+import cv2
 import imageio
 import numpy as np
-import cv2
+
 from cosmos_transfer1.utils import log
 
 

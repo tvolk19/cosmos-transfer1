@@ -14,10 +14,11 @@
 # limitations under the License.
 
 import json
+
 import gradio as gr
-from server.deploy_config import Config
 
 from server import gradio_file_server, gradio_log_file_viewer
+from server.deploy_config import Config
 
 
 def create_gradio_interface(infer_func):

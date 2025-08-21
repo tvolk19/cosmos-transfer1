@@ -16,9 +16,11 @@
 import json
 import os
 import subprocess
+
+from gradio_util import get_output_folder, get_outputs
+
 from cosmos_transfer1.utils import log
 from server.deploy_config import Config
-from gradio_util import get_output_folder, get_outputs
 
 
 class GradioCLIApp:
