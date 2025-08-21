@@ -15,12 +15,14 @@
 
 import json
 import os
+
+from gradio_util import create_worker_pipeline, get_output_folder, get_outputs
+
 from cosmos_transfer1.utils import log
 from server.deploy_config import Config
-from server.model_server import ModelServer
 from server.gradio_app_cli import GradioCLIApp
 from server.gradio_interface import create_gradio_interface
-from gradio_util import get_output_folder, get_outputs, create_worker_pipeline
+from server.model_server import ModelServer
 
 
 class GradioApp:
@@ -58,7 +60,6 @@ class GradioApp:
 
 
 if __name__ == "__main__":
-
     cfg = Config()
     log.info(f"Starting Gradio app with config: {str(cfg)}")
 
