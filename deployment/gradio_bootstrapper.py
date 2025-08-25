@@ -19,9 +19,9 @@ import os
 from loguru import logger as log
 from cosmos_gradio.gradio_app.gradio_app import GradioApp
 from cosmos_gradio.gradio_app.gradio_interface import create_gradio_interface
-from cosmos_gradio.model_ipc.deployment_env import DeploymentEnv
+from cosmos_gradio.deployment_env import DeploymentEnv
 from deployment.model.model_config import Config as ModelConfig
-from imaginaire.utils import log
+from cosmos_transfer1.utils import log
 
 if __name__ == "__main__":
     model_cfg = ModelConfig()
@@ -30,8 +30,7 @@ if __name__ == "__main__":
     os.environ["FACTORY_MODULE"] = "deployment.model.transfer_worker"
     global_env = DeploymentEnv()
 
-    log.info(f"Starting Gradio app with model config: {model_cfg!s}")
-    log.info(f"server config: {global_env!s}")
+    log.info(f"Starting Gradio app with global env config: {global_env!s}")
 
     app = GradioApp(global_env.num_gpus, global_env.factory_module, global_env.factory_function, global_env.output_dir)
 

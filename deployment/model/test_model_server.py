@@ -1,10 +1,8 @@
 import json
 import os
-from deployment.model.transfer_worker import (
-    TransferValidator,
-)
-from imaginaire.utils import log
-from cosmos_gradio.model_ipc.server_config import Config
+from deployment.model.transfer_worker import TransferValidator, hint_keys
+from cosmos_transfer1.utils import log
+from cosmos_gradio.deployment_env import DeploymentEnv
 from cosmos_gradio.model_ipc.model_server import ModelServer
 
 
@@ -14,28 +12,44 @@ def get_spec(spec_file):
     return controlnet_specs
 
 
-d1 = "assets/robot_example/depth/robot_depth_spec.json"
-e1 = "assets/robot_example/edge/robot_edge_spec.json"
-s1 = "assets/robot_example/seg/robot_seg_spec.json"
-
-
 def test_model_server():
-
-    # test os.environ["FACTORY_MODULE"] = "cosmos_gradio.model_ipc.model_worker"
+    folder = "outputs_4gpu/"
     os.environ["FACTORY_MODULE"] = "deployment.model.transfer_worker"
+    cfg = DeploymentEnv()
 
-    folder = "outputs/"
-    with ModelServer(cfg=Config()) as pipeline:
-        validator = TransferValidator()
-
+    with ModelServer(
+        num_gpus=cfg.num_gpus, factory_module=cfg.factory_module, factory_function=cfg.factory_function
+    ) as pipeline:
+        validator = TransferValidator(hint_keys=hint_keys)
         log.info("Inference start****************************************")
 
         model_params = validator.parse_and_validate(
-            controlnet_specs=get_spec(e1),
+            controlnet_specs=get_spec("assets/inference_cosmos_transfer1_multi_control.json"),
         )
-        model_params["output_dir"] = f"{folder}/"
+        model_params["output_dir"] = f"{folder}/multi_control_3/"
         pipeline.infer(model_params)
+
         log.info("Inference complete****************************************")
+        # model_params = validator.parse_and_validate(
+        #     controlnet_specs=get_spec("assets/inference_cosmos_transfer1_uniform_weights.json"),
+        # )
+        # model_params["output_dir"] = f"{folder}/multi_control_4/"
+        # pipeline.infer(model_params)
+        # log.info("Inference complete****************************************")
+
+        # model_params = validator.parse_and_validate(
+        #     controlnet_specs=get_spec("assets/inference_cosmos_transfer1_single_control_vis.json"),
+        # )
+        # model_params["output_dir"] = f"{folder}/single_control/"
+        # pipeline.infer(model_params)
+        # log.info("Inference complete****************************************")
+
+        # model_params = validator.parse_and_validate(
+        #     controlnet_specs=get_spec("assets/inference_cosmos_transfer1_uniform_weights.json"),
+        # )
+        # model_params["output_dir"] = f"{folder}/multi_control_4_2/"
+        # pipeline.infer(model_params)
+        # log.info("Inference complete****************************************")
 
 
 if __name__ == "__main__":

@@ -19,55 +19,39 @@ from typing import Dict
 import json
 
 
-default_request_vis = json.dumps(
+default_request_transfer = json.dumps(
     {
-        "prompt_path": "assets/robot_example/robot_prompt.txt",
-        "video_path": "assets/robot_example/robot_input.mp4",
-        "control_weight": 1.0,
-        "vis": {"control_path": "assets/robot_example/vis/robot_vis.mp4"},
+        "input_video_path": "assets/example1_input_video.mp4",
+        "prompt": "The video captures a stunning, photorealistic scene with remarkable attention to detail, giving it a lifelike appearance that is almost indistinguishable from reality. It appears to be from a high-budget 4K movie, showcasing ultra-high-definition quality with impeccable resolution.",
+        "negative_prompt": "The video captures a game playing, with bad crappy graphics and cartoonish frames. It represents a recording of old outdated games. The lighting looks very fake. The textures are very raw and basic. The geometries are very primitive. The images are very pixelated and of poor CG quality. There are many subtitles in the footage. Overall, the video is unrealistic at all.",
+        "guidance": 7.0,
+        "num_steps": 35,
+        "seed": 1,
+        "sigma_max": 70.0,
+        "blur_strength": "medium",
+        "canny_threshold": "medium",
+        "edge": {"control_weight": 1.0},
     },
     indent=2,
 )
 
-default_request_depth = json.dumps(
+default_request_transfer_av = json.dumps(
     {
-        "prompt_path": "assets/robot_example/robot_prompt.txt",
-        "video_path": "assets/robot_example/robot_input.mp4",
-        "control_weight": 1.0,
-        "depth": {"control_path": "assets/robot_example/depth/robot_depth.mp4"},
+        "prompt": "The video is captured from a camera mounted on a car. The camera is facing forward. The video showcases a scenic golden-hour drive through a suburban area, bathed in the warm, golden hues of the setting sun. The dashboard camera captures the play of light and shadow as the sun’s rays filter through the trees, casting elongated patterns onto the road. The streetlights remain off, as the golden glow of the late afternoon sun provides ample illumination. The two-lane road appears to shimmer under the soft light, while the concrete barrier on the left side of the road reflects subtle warm tones. The stone wall on the right, adorned with lush greenery, stands out vibrantly under the golden light, with the palm trees swaying gently in the evening breeze. Several parked vehicles, including white sedans and vans, are seen on the left side of the road, their surfaces reflecting the amber hues of the sunset. The trees, now highlighted in a golden halo, cast intricate shadows onto the pavement. Further ahead, houses with red-tiled roofs glow warmly in the fading light, standing out against the sky, which transitions from deep orange to soft pastel blue. As the vehicle continues, a white sedan is seen driving in the same lane, while a black sedan and a white van move further ahead. The road markings are crisp, and the entire setting radiates a peaceful, almost cinematic beauty. The golden light, combined with the quiet suburban landscape, creates an atmosphere of tranquility and warmth, making for a mesmerizing and soothing drive.",
+        "sigma_max": 80,
+        "hdmap": {"control_weight": 0.3, "input_control": "assets/sample_av_multi_control_input_hdmap.mp4"},
+        "lidar": {"control_weight": 0.7, "input_control": "assets/sample_av_multi_control_input_lidar.mp4"},
     },
     indent=2,
 )
 
-default_request_edge = json.dumps(
-    {
-        "prompt_path": "assets/robot_example/robot_prompt.txt",
-        "video_path": "assets/robot_example/robot_input.mp4",
-        "control_weight": 1.0,
-        "edge": {"control_path": "assets/robot_example/edge/robot_edge.mp4", "preset_edge_threshold": "medium"},
-    },
-    indent=2,
-)
-
-default_request_seg = json.dumps(
-    {
-        "prompt_path": "assets/robot_example/robot_prompt.txt",
-        "video_path": "assets/robot_example/robot_input.mp4",
-        "control_weight": 1.0,
-        "seg": {"control_path": "assets/robot_example/seg/robot_seg.mp4"},
-    },
-    indent=2,
-)
-
-help_text_vis = """
+help_text_transfer = """
                     ### Generation Parameters:
                     - `prompt` (string): Text description of desired output (default: empty string)
                     - `negative_prompt` (string): What to avoid in generation (default: predefined negative prompt)
 
                     """
-help_text_depth = help_text_vis
-help_text_edge = help_text_vis
-help_text_seg = help_text_vis
+help_text_transfer_av = help_text_transfer
 
 
 @dataclass
@@ -75,27 +59,21 @@ class Config:
 
     header: Dict[str, str] = field(
         default_factory=lambda: {
-            "vis": "Cosmos-Transfer2 Blur Transfer",
-            "depth": "Cosmos-Transfer2 Depth Transfer",
-            "edge": "Cosmos-Transfer2 Edge Transfer",
-            "seg": "Cosmos-Transfer2 Segmentation Transfer",
+            "transfer": "Cosmos-Transfer1",
+            "transfer_av": "Cosmos-Transfer AV",
         }
     )
 
     help_text: Dict[str, str] = field(
         default_factory=lambda: {
-            "vis": help_text_vis,
-            "depth": help_text_depth,
-            "edge": help_text_edge,
-            "seg": help_text_seg,
+            "transfer": help_text_transfer,
+            "transfer_av": help_text_transfer_av,
         }
     )
 
     default_request: Dict[str, str] = field(
         default_factory=lambda: {
-            "vis": default_request_vis,
-            "depth": default_request_depth,
-            "edge": default_request_edge,
-            "seg": default_request_seg,
+            "transfer": default_request_transfer,
+            "transfer_av": default_request_transfer_av,
         }
     )

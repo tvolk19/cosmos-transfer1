@@ -1,8 +1,7 @@
 import json
-import os
 from pathlib import Path
 
-from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferValidator, hint_keys
+from deployment.model.transfer_worker import TransferValidator, hint_keys
 from cosmos_transfer1.utils import log
 from server.deploy_config import Config
 from server.gradio_app_cli import GradioCLIApp
@@ -91,42 +90,6 @@ def test_model_server_cli_batch(input_folder):
             continue
 
     log.info("Batch processing complete")
-
-
-def test_model_server():
-    folder = "outputs/"
-    with ModelServer(num_workers=Config.num_gpus) as pipeline:
-        validator = TransferValidator(hint_keys=hint_keys)
-
-        log.info("Inference start****************************************")
-
-        # model_params = validator.parse_and_validate(
-        #     controlnet_specs=get_spec("assets/inference_cosmos_transfer1_multi_control.json"),
-        # )
-        # model_params["output_dir"] = f"{folder}/multi_control_3/"
-        # pipeline.infer(model_params)
-
-        # log.info("Inference complete****************************************")
-        model_params = validator.parse_and_validate(
-            controlnet_specs=get_spec("assets/inference_cosmos_transfer1_uniform_weights.json"),
-        )
-        model_params["output_dir"] = f"{folder}/multi_control_4/"
-        pipeline.infer(model_params)
-        log.info("Inference complete****************************************")
-
-        model_params = validator.parse_and_validate(
-            controlnet_specs=get_spec("assets/inference_cosmos_transfer1_single_control_vis.json"),
-        )
-        model_params["output_dir"] = f"{folder}/single_control/"
-        pipeline.infer(model_params)
-        log.info("Inference complete****************************************")
-
-        model_params = validator.parse_and_validate(
-            controlnet_specs=get_spec("assets/inference_cosmos_transfer1_uniform_weights.json"),
-        )
-        model_params["output_dir"] = f"{folder}/multi_control_4_2/"
-        pipeline.infer(model_params)
-        log.info("Inference complete****************************************")
 
 
 if __name__ == "__main__":

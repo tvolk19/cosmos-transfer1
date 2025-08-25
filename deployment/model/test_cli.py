@@ -5,30 +5,15 @@ from deployment.model.transfer_worker import (
     TransferWorker,
     TransferValidator,
 )
-from imaginaire.utils import log
-from server.deploy_config import Config
-from server.model_server import ModelServer
-from server.gradio_app_cli import GradioCLIApp
+from cosmos_transfer1.utils import log
+from cosmos_gradio.deployment_env import DeploymentEnv
+from cosmos_gradio.gradio_app.gradio_app_cli import GradioCLIApp
 
 
 def get_spec(spec_file):
     with open(spec_file, "r") as f:
         controlnet_specs = json.load(f)
     return controlnet_specs
-
-
-d1 = "assets/robot_example/depth/robot_depth_spec.json"
-e1 = "assets/robot_example/edge/robot_edge_spec.json"
-
-
-def test_cli():
-
-    folder = "outputs/"
-    app = GradioCLIApp(num_workers=Config.num_gpus, checkpoint_dir=Config.checkpoint_dir)
-
-    log.info("Inference start****************************************")
-    controlnet_specs = get_spec(d1)
-    app.infer_dict(controlnet_specs)
 
 
 av_prompt = "The video is captured from a camera mounted on a car. The camera is facing forward. The video showcases a scenic golden-hour drive through a suburban area, bathed in the warm, golden hues of the setting sun. The dashboard camera captures the play of light and shadow as the sun’s rays filter through the trees, casting elongated patterns onto the road. The streetlights remain off, as the golden glow of the late afternoon sun provides ample illumination. The two-lane road appears to shimmer under the soft light, while the concrete barrier on the left side of the road reflects subtle warm tones. The stone wall on the right, adorned with lush greenery, stands out vibrantly under the golden light, with the palm trees swaying gently in the evening breeze. Several parked vehicles, including white sedans and vans, are seen on the left side of the road, their surfaces reflecting the amber hues of the sunset. The trees, now highlighted in a golden halo, cast intricate shadows onto the pavement. Further ahead, houses with red-tiled roofs glow warmly in the fading light, standing out against the sky, which transitions from deep orange to soft pastel blue. As the vehicle continues, a white sedan is seen driving in the same lane, while a black sedan and a white van move further ahead. The road markings are crisp, and the entire setting radiates a peaceful, almost cinematic beauty. The golden light, combined with the quiet suburban landscape, creates an atmosphere of tranquility and warmth, making for a mesmerizing and soothing drive."
@@ -54,9 +39,9 @@ def get_parameters(json_file):
 
 
 def test_cli_batch(input_folder):
-
-    app = GradioCLIApp(num_workers=Config.num_gpus, checkpoint_dir=Config.checkpoint_dir)
-    app1 = GradioCLIApp(num_workers=1, checkpoint_dir=Config.checkpoint_dir)
+    cfg = DeploymentEnv()
+    app = GradioCLIApp(num_workers=cfg.num_gpus, checkpoint_dir=cfg.checkpoint_dir)
+    app1 = GradioCLIApp(num_workers=1, checkpoint_dir=cfg.checkpoint_dir)
 
     # Get all JSON files from the input folder
     input_path = Path(input_folder)
@@ -101,6 +86,16 @@ def test_cli_batch(input_folder):
             continue
 
     log.info("Batch processing complete")
+
+
+def test_cli():
+    cfg = DeploymentEnv()
+    folder = "outputs/"
+    app = GradioCLIApp(num_workers=cfg.num_gpus, checkpoint_dir=cfg.checkpoint_dir)
+
+    log.info("Inference start****************************************")
+    controlnet_specs = get_spec(d1)
+    app.infer_dict(controlnet_specs)
 
 
 if __name__ == "__main__":
