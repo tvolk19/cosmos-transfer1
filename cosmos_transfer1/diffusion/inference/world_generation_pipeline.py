@@ -407,7 +407,10 @@ class DiffusionControl2WorldGenerationPipeline(BaseWorldGenerationPipeline):
         video = (video * 255).to(torch.uint8).cpu()
         return video
 
-    def reload_model(self, control_inputs: Optional[dict]):
+    def reload_model(self):
+        if hasattr(self.model, "hint_encoders"):
+            del self.model.hint_encoders
+
         self._offload_network()
         self._load_network()
 

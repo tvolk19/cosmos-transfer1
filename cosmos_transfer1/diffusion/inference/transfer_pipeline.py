@@ -26,7 +26,7 @@ from cosmos_transfer1.diffusion.inference.inference_utils import default_model_n
 from cosmos_transfer1.diffusion.inference.preprocessors import Preprocessors
 from cosmos_transfer1.diffusion.inference.world_generation_pipeline import DiffusionControl2WorldGenerationPipeline
 from cosmos_transfer1.utils import log
-from cosmos_transfer1.utils.io import save_video
+from cosmos_transfer1.utils.io import save_video, validate_input_video
 
 """
 This module wrapper classes required for the transfer pipeline to work with model server/worker classes.
@@ -99,6 +99,18 @@ class TransferValidator:
                         raise ValueError(
                             f"Control weight for {key} must be a valid non-negative float or a path to a .pt file."
                         )
+            if key in ["hdmap", "lidar"]:
+                # For AV-specific controlnets, ensure input_control is provided
+                if "input_control" not in config:
+                    raise ValueError(f"Controlnet '{key}' requires an 'input_control' video.")
+
+            # Validate input_control videos if provided
+            if "input_control" in config and config["input_control"]:
+                try:
+                    validate_input_video(config["input_control"])
+                    log.info(f"Control video validation successful for {key}: {config['input_control']}")
+                except (ValueError, FileNotFoundError) as e:
+                    raise ValueError(f"Invalid control video for '{key}': {e}")
 
     def validate_params(
         self,
@@ -137,6 +149,7 @@ class TransferValidator:
         # Video and prompt settings
         args_dict = {}
         if input_video_path:
+            validate_input_video(input_video_path)
             args_dict["input_video"] = input_video_path
         if prompt:
             args_dict["prompt"] = prompt
@@ -162,8 +175,11 @@ class TransferValidator:
         if not input_video_path:
             for key in controlnet_specs:
                 if key == "vis" or key == "edge":
+                    # vis and edge will always create an input control from the input video
+                    # vis creates a blur video, edge creates a canny video
                     raise ValueError(f"Controlnet '{key}' requires an input video. Please specify 'input_video_path'.")
                 else:
+                    # all other controlnets require an input control video ONLY if input control is not provided
                     controlnet = controlnet_specs.get(key)
                     if not controlnet.get("input_control"):
                         raise ValueError(f"Controlnet '{key}' requires an 'input_control' video OR input_video_path.")
@@ -326,12 +342,10 @@ class TransferPipeline:
         )
 
         if config_changed:
-            self.pipeline.reload_model(self.control_inputs)
+            self.pipeline.reload_model()
 
-        # original code is creating deepcopy. are values touched?
-        # TODO add control weights as inference parameter
+        # preprocessor will further modify the control inputs
         current_control_inputs = copy.deepcopy(self.control_inputs)
-        log.info(f"current_control_inputs: {json.dumps(current_control_inputs, indent=4)}")
 
         log.info("Running preprocessor")
         self.preprocessors(
@@ -340,6 +354,7 @@ class TransferPipeline:
             current_control_inputs,
             output_dir,
         )
+        log.info(f"current_control_inputs: {json.dumps(current_control_inputs, indent=4)}")
 
         # TODO: add support for regional prompts and region definitions
         if hasattr(self.pipeline, "regional_prompts"):

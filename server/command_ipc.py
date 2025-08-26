@@ -108,7 +108,9 @@ class WorkerStatus:
 
         while not os.path.exists(status_file):
             if time.time() - start_time > timeout:
-                os.remove(status_file)
+                # avoid race condition between server/worker during shutdown
+                if os.path.exists(status_file):
+                    os.remove(status_file)
                 return {"status": "timeout", "rank": rank}
             time.sleep(0.5)
 

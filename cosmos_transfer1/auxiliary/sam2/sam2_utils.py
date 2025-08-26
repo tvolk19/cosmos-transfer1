@@ -77,7 +77,7 @@ def video_to_frames(input_loc, output_loc):
         # Extract the frame
         ret, frame = cap.read()
         if not ret:
-            continue
+            raise ValueError("Could not read frame from video file.")
         # Write the results back to output location.
         cv2.imwrite(output_loc + "/%#05d.jpg" % (count + 1), frame)
         count = count + 1

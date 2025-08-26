@@ -22,7 +22,7 @@ from cosmos_transfer1.diffusion.inference.transfer_pipeline import TransferValid
 from cosmos_transfer1.utils import log
 from server.command_ipc import WorkerCommand, WorkerStatus
 from server.deploy_config import Config
-from server.model_factory import create_worker_pipeline
+from server.gradio_util import create_worker_pipeline
 
 
 class ModelWorker:

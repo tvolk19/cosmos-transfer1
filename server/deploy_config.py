@@ -14,13 +14,16 @@
 # limitations under the License.
 
 import os
+from dataclasses import dataclass
 
 
+@dataclass
 class Config:
-    checkpoint_dir = os.getenv("CHECKPOINT_DIR", "checkpoints")
-    output_dir = os.getenv("OUTPUT_DIR", "outputs/")
-    uploads_dir = os.getenv("UPLOADS_DIR", "uploads/")
-    log_file = os.getenv("LOG_FILE", "output.log")
-    num_gpus = int(os.environ.get("NUM_GPU", 1))
-    factory_module = os.getenv("FACTORY_MODULE", "cosmos_transfer1.diffusion.inference.transfer_pipeline")
-    factory_function = os.getenv("FACTORY_FUNCTION", "create_transfer_pipeline")
+    checkpoint_dir: str = os.getenv("CHECKPOINT_DIR", "checkpoints")
+    output_dir: str = os.getenv("OUTPUT_DIR", "outputs/")
+    uploads_dir: str = os.getenv("UPLOADS_DIR", "uploads/")
+    log_file: str = os.getenv("LOG_FILE", "output.log")
+    num_gpus: int = int(os.environ.get("NUM_GPU", 1))
+    factory_module: str = os.getenv("FACTORY_MODULE", "cosmos_transfer1.diffusion.inference.transfer_pipeline")
+    factory_function: str = os.getenv("FACTORY_FUNCTION", "create_transfer_pipeline")
+    use_cli: bool = os.getenv("USE_CLI", "False").lower() in ("true", "1", "yes")
