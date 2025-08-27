@@ -18,7 +18,7 @@ import os
 
 from loguru import logger as log
 from cosmos_gradio.gradio_app.gradio_app import GradioApp
-from cosmos_gradio.gradio_app.gradio_interface import create_gradio_interface
+from cosmos_gradio.gradio_app.gradio_ui import create_gradio_UI
 from cosmos_gradio.deployment_env import DeploymentEnv
 from deployment.model.model_config import Config as ModelConfig
 from cosmos_transfer1.utils import log
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     app = GradioApp(global_env.num_gpus, global_env.factory_module, global_env.factory_function, global_env.output_dir)
 
-    interface = create_gradio_interface(
+    interface = create_gradio_UI(
         app.infer,
         header=model_cfg.header[global_env.model_name],
         default_request=model_cfg.default_request[global_env.model_name],
