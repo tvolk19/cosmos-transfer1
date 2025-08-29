@@ -21,10 +21,17 @@ import os
 
 import torch
 
-from cosmos_transfer1.checkpoints import BASE_7B_CHECKPOINT_AV_SAMPLE_PATH, BASE_7B_CHECKPOINT_PATH
+from cosmos_transfer1.checkpoints import (
+    BASE_7B_CHECKPOINT_AV_SAMPLE_PATH,
+    BASE_7B_CHECKPOINT_PATH,
+    EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH,
+)
 from cosmos_transfer1.diffusion.inference.inference_utils import default_model_names
 from cosmos_transfer1.diffusion.inference.preprocessors import Preprocessors
-from cosmos_transfer1.diffusion.inference.world_generation_pipeline import DiffusionControl2WorldGenerationPipeline
+from cosmos_transfer1.diffusion.inference.world_generation_pipeline import (
+    DiffusionControl2WorldGenerationPipeline,
+    DistilledControl2WorldGenerationPipeline,
+)
 from cosmos_transfer1.utils import log
 from cosmos_transfer1.utils.io import save_video, validate_input_video
 from cosmos_gradio.deployment_env import DeploymentEnv
@@ -258,20 +265,36 @@ class TransferPipeline:
         self.checkpoint_dir = checkpoint_dir
         self.video_save_name = "output"
 
-        self.pipeline = DiffusionControl2WorldGenerationPipeline(
-            checkpoint_dir=checkpoint_dir,
-            checkpoint_name=checkpoint_name,
-            control_inputs=self.control_inputs,
-            process_group=self.process_group,
-            offload_network=False,
-            offload_text_encoder_model=False,
-            offload_guardrail_models=False,
-            offload_prompt_upsampler=False,
-            upsample_prompt=False,
-            fps=24,
-            num_input_frames=1,
-            disable_guardrail=True,
-        )
+        log.info(f"Initializing TransferPipeline with {checkpoint_name=}")
+        if checkpoint_name == EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH:
+            self.pipeline = DistilledControl2WorldGenerationPipeline(
+                checkpoint_dir=checkpoint_dir,
+                checkpoint_name=checkpoint_name,
+                control_inputs=self.control_inputs,
+                process_group=self.process_group,
+                offload_network=False,
+                offload_text_encoder_model=False,
+                offload_guardrail_models=False,
+                offload_prompt_upsampler=False,
+                upsample_prompt=False,
+                fps=24,
+                num_input_frames=1,
+            )
+        else:
+            self.pipeline = DiffusionControl2WorldGenerationPipeline(
+                checkpoint_dir=checkpoint_dir,
+                checkpoint_name=checkpoint_name,
+                control_inputs=self.control_inputs,
+                process_group=self.process_group,
+                offload_network=False,
+                offload_text_encoder_model=False,
+                offload_guardrail_models=False,
+                offload_prompt_upsampler=False,
+                upsample_prompt=False,
+                fps=24,
+                num_input_frames=1,
+                disable_guardrail=True,
+            )
 
     def update_controlnet_spec(
         self,
@@ -428,9 +451,14 @@ def create_worker(create_model=True):
     cfg = DeploymentEnv()
     pipeline = None
     if create_model:
+        if cfg.use_distilled:
+            checkpoint_name = EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH
+        else:
+            checkpoint_name = BASE_7B_CHECKPOINT_PATH
         pipeline = TransferPipeline(
             num_gpus=cfg.num_gpus,
             checkpoint_dir=cfg.checkpoint_dir,
+            checkpoint_name=checkpoint_name,
         )
         gc.collect()
         torch.cuda.empty_cache()
@@ -456,6 +484,7 @@ def create_transfer_pipeline_AV(create_model=True):
 
     pipeline = None
     if create_model:
+
         pipeline = TransferPipeline(
             num_gpus=cfg.num_gpus,
             checkpoint_dir=cfg.checkpoint_dir,
