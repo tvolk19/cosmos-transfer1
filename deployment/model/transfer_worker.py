@@ -265,7 +265,7 @@ class TransferPipeline:
         self.checkpoint_dir = checkpoint_dir
         self.video_save_name = "output"
 
-        log.info(f"Initializing TransferPipeline with {checkpoint_name=}")
+        log.info(f"Initializing TransferPipeline with {checkpoint_name=} initial control net={first_key}")
         if checkpoint_name == EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH:
             self.pipeline = DistilledControl2WorldGenerationPipeline(
                 checkpoint_dir=checkpoint_dir,
@@ -467,7 +467,7 @@ def create_worker(create_model=True):
     return pipeline, validator
 
 
-def create_transfer_pipeline_AV(create_model=True):
+def create_worker_AV(create_model=True):
     """Factory function to create AV-specific transfer pipeline and validator.
 
     Creates a pipeline configured for autonomous vehicle data with specialized

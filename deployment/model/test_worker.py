@@ -5,7 +5,10 @@ from deployment.model.transfer_worker import (
     hint_keys,
 )
 from cosmos_transfer1.utils import log
-from deployment.model.transfer_worker import BASE_7B_CHECKPOINT_AV_SAMPLE_PATH
+from deployment.model.transfer_worker import (
+    BASE_7B_CHECKPOINT_AV_SAMPLE_PATH,
+    EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH,
+)
 from cosmos_gradio.deployment_env import DeploymentEnv
 import json
 import os
@@ -39,22 +42,26 @@ def test_transfer():
 
     cfg = DeploymentEnv()
     print(cfg)
-    pipeline = TransferPipeline(num_gpus=cfg.num_gpus, checkpoint_dir=cfg.checkpoint_dir)
+    pipeline = TransferPipeline(
+        num_gpus=cfg.num_gpus,
+        checkpoint_dir=cfg.checkpoint_dir,
+        checkpoint_name=EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH,
+    )
 
     log.info("Inference start****************************************")
-    # model_params = validator.parse_and_validate(
-    #     controlnet_specs=get_spec("assets/inference_cosmos_transfer1_single_control_vis.json"),
-    # )
-    # model_params["output_dir"] = "outputs/vis/"
-    # pipeline.infer(model_params)
-    # log.info("Inference complete****************************************")
+    model_params = validator.parse_and_validate(
+        controlnet_specs=get_spec("assets/inference_cosmos_transfer1_single_control_vis.json"),
+    )
+    model_params["output_dir"] = "outputs/vis/"
+    pipeline.infer(model_params)
+    log.info("Inference complete****************************************")
 
-    # model_params = validator.parse_and_validate(
-    #     controlnet_specs=get_spec("assets/preload_vis.json"),
-    # )
-    # model_params["output_dir"] = "outputs/test1/"
-    # pipeline.infer(model_params)
-    # log.info("Inference complete****************************************")
+    model_params = validator.parse_and_validate(
+        controlnet_specs=get_spec("assets/inference_cosmos_transfer1_single_control_edge.json"),
+    )
+    model_params["output_dir"] = "outputs/edge/"
+    pipeline.infer(model_params)
+    log.info("Inference complete****************************************")
 
     model_params = validator.parse_and_validate(
         controlnet_specs=get_spec("assets/inference_cosmos_transfer1_multi_control.json"),
