@@ -214,7 +214,7 @@ class TransferValidator:
         return full_dict
 
 
-class TransferPipeline:
+class TransferWorker:
     """Main transfer pipeline implementation for video-to-video generation.
 
     This pipeline maintains loaded Cosmos models for efficient video transfer inference.
@@ -438,61 +438,47 @@ class TransferPipeline:
             dist.destroy_process_group()
 
 
-def create_worker(create_model=True):
-    """Factory function to create transfer pipeline and validator.
-
-    Args:
-        cfg: Configuration object with model settings including checkpoint_dir
-        create_model (bool): Whether to actually create the model pipeline (default: True)
+def create_worker():
+    """Factory function to create transfer worker.
 
     Returns:
-        tuple: (pipeline, validator) - TransferPipeline instance and TransferValidator
+        TransferPipeline instance
     """
     cfg = DeploymentEnv()
     pipeline = None
-    if create_model:
-        if cfg.use_distilled:
-            checkpoint_name = EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH
-        else:
-            checkpoint_name = BASE_7B_CHECKPOINT_PATH
-        pipeline = TransferPipeline(
-            num_gpus=cfg.num_gpus,
-            checkpoint_dir=cfg.checkpoint_dir,
-            checkpoint_name=checkpoint_name,
-        )
-        gc.collect()
-        torch.cuda.empty_cache()
+    if cfg.use_distilled:
+        checkpoint_name = EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH
+    else:
+        checkpoint_name = BASE_7B_CHECKPOINT_PATH
+    pipeline = TransferWorker(
+        num_gpus=cfg.num_gpus,
+        checkpoint_dir=cfg.checkpoint_dir,
+        checkpoint_name=checkpoint_name,
+    )
+    gc.collect()
+    torch.cuda.empty_cache()
 
-    validator = TransferValidator(hint_keys=hint_keys)
-    return pipeline, validator
+    return pipeline
 
 
-def create_worker_AV(create_model=True):
+def create_worker_AV():
     """Factory function to create AV-specific transfer pipeline and validator.
 
     Creates a pipeline configured for autonomous vehicle data with specialized
     hint keys (hdmap, lidar) and AV sample checkpoint.
 
-    Args:
-        cfg: Configuration object with model settings including checkpoint_dir
-        create_model (bool): Whether to actually create the model pipeline (default: True)
-
     Returns:
-        tuple: (pipeline, validator) - AV-configured TransferPipeline and TransferValidator
+        AV-configured TransferPipeline instance
     """
     cfg = DeploymentEnv()
 
-    pipeline = None
-    if create_model:
+    pipeline = TransferWorker(
+        num_gpus=cfg.num_gpus,
+        checkpoint_dir=cfg.checkpoint_dir,
+        checkpoint_name=BASE_7B_CHECKPOINT_AV_SAMPLE_PATH,
+        hint_keys=hint_keys_av,
+    )
+    gc.collect()
+    torch.cuda.empty_cache()
 
-        pipeline = TransferPipeline(
-            num_gpus=cfg.num_gpus,
-            checkpoint_dir=cfg.checkpoint_dir,
-            checkpoint_name=BASE_7B_CHECKPOINT_AV_SAMPLE_PATH,
-            hint_keys=hint_keys_av,
-        )
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    validator = TransferValidator(hint_keys=hint_keys_av)
-    return pipeline, validator
+    return pipeline

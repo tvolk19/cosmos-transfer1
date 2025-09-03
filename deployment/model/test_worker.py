@@ -1,5 +1,5 @@
 from deployment.model.transfer_worker import (
-    TransferPipeline,
+    TransferWorker,
     TransferValidator,
     hint_keys_av,
     hint_keys,
@@ -21,7 +21,7 @@ def get_spec(spec_file):
 
 
 def test_transfer_AV():
-    pipeline = TransferPipeline(
+    pipeline = TransferWorker(
         num_gpus=int(os.environ.get("NUM_GPU", 1)),
         checkpoint_name=BASE_7B_CHECKPOINT_AV_SAMPLE_PATH,
         hint_keys=hint_keys_av,
@@ -42,7 +42,7 @@ def test_transfer():
 
     cfg = DeploymentEnv()
     print(cfg)
-    pipeline = TransferPipeline(
+    pipeline = TransferWorker(
         num_gpus=cfg.num_gpus,
         checkpoint_dir=cfg.checkpoint_dir,
         checkpoint_name=EDGE2WORLD_CONTROLNET_7B_DISTILLED_CHECKPOINT_PATH,

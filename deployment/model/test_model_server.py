@@ -14,11 +14,10 @@ def get_spec(spec_file):
 
 def test_model_server():
     folder = "outputs_4gpu/"
-    os.environ["FACTORY_MODULE"] = "deployment.model.transfer_worker"
     cfg = DeploymentEnv()
 
     with ModelServer(
-        num_gpus=cfg.num_gpus, factory_module=cfg.factory_module, factory_function=cfg.factory_function
+        num_gpus=cfg.num_gpus, factory_module="deployment.model.transfer_worker", factory_function="create_worker"
     ) as pipeline:
         validator = TransferValidator(hint_keys=hint_keys)
         log.info("Inference start****************************************")

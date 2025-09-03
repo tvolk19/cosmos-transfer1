@@ -13,26 +13,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-
 from loguru import logger as log
 from cosmos_gradio.gradio_app.gradio_app import GradioApp
 from cosmos_gradio.gradio_app.gradio_ui import create_gradio_UI
 from cosmos_gradio.deployment_env import DeploymentEnv
 from deployment.model.model_config import Config as ModelConfig
 from cosmos_transfer1.utils import log
+from deployment.model.transfer_worker import TransferValidator, hint_keys, hint_keys_av
 
 if __name__ == "__main__":
     model_cfg = ModelConfig()
 
     # configure server to use the transfer worker in the worker procs
-    os.environ["FACTORY_MODULE"] = "deployment.model.transfer_worker"
     global_env = DeploymentEnv()
 
     log.info(f"Starting Gradio app with global env config: {global_env!s}")
 
-    app = GradioApp(global_env.num_gpus, global_env.factory_module, global_env.factory_function, global_env.output_dir)
+    factory_funcs = {
+        "transfer": "create_worker",
+        "transfer_av": "create_worker_AV",
+    }
+
+    validators = {
+        "transfer": TransferValidator(hint_keys=hint_keys),
+        "transfer_av": TransferValidator(hint_keys=hint_keys_av),
+    }
+
+    app = GradioApp(
+        num_gpus=global_env.num_gpus,
+        validator=validators[global_env.model_name],
+        factory_module="deployment.model.transfer_worker",
+        factory_function=factory_funcs[global_env.model_name],
+        output_dir=global_env.output_dir,
+    )
 
     interface = create_gradio_UI(
         app.infer,
